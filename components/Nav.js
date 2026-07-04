@@ -42,9 +42,16 @@ export default function Nav() {
         <div className="hidden md:flex items-center gap-7 text-[14px]">
           <Link href="/products" className="text-[#2C1E21] hover:text-[#702935] font-medium">Marketplace</Link>
           <Link href="/verify" className="text-[#2C1E21] hover:text-[#702935] font-medium flex items-center gap-1.5"><Shield size={15}/>Verify</Link>
-          {user?.role === 'ngo' || user?.role === 'admin' ? (
+          <Link href="/explorer" className="text-[#2C1E21] hover:text-[#702935] font-medium">Explorer</Link>
+          {user?.role === 'ngo' && (
             <Link href="/dashboard/ngo" className="text-[#2C1E21] hover:text-[#702935] font-medium flex items-center gap-1.5"><LayoutDashboard size={15}/>NGO</Link>
-          ) : null}
+          )}
+          {user?.role === 'admin' && (
+            <Link href="/dashboard/admin" className="text-[#2C1E21] hover:text-[#702935] font-medium flex items-center gap-1.5"><LayoutDashboard size={15}/>Admin</Link>
+          )}
+          {user?.role === 'customer' && (
+            <Link href="/dashboard/customer" className="text-[#2C1E21] hover:text-[#702935] font-medium flex items-center gap-1.5"><LayoutDashboard size={15}/>My account</Link>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Link href="/cart" className="relative p-2 rounded-lg hover:bg-white transition">

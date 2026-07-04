@@ -24,7 +24,11 @@ function AuthPage() {
       localStorage.setItem('cc_token', d.token)
       localStorage.setItem('cc_user', JSON.stringify(d.user))
       window.dispatchEvent(new Event('cc_cart_updated'))
-      router.push(d.user.role === 'ngo' || d.user.role === 'admin' ? '/dashboard/ngo' : '/products')
+      const dest = d.user.role === 'admin' ? '/dashboard/admin'
+        : d.user.role === 'ngo' ? '/dashboard/ngo'
+        : d.user.role === 'customer' ? '/dashboard/customer'
+        : '/products'
+      window.location.href = dest
     } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
 

@@ -34,50 +34,371 @@ function clean(doc) { if (!doc) return doc; const { _id, ...rest } = doc; return
 export async function OPTIONS() { return cors(new NextResponse(null, { status: 200 })) }
 
 // ------ Explorer helpers ------
-async function fetchContractEvents({ limit = 50 } = {}) {
-  const contract = getContract(false)
-  const provider = getProvider()
-  const latest = await provider.getBlockNumber()
-  const deployed = await getDeploymentBlock()
-  const fromBlock = Math.max(deployed, latest - 500) // keep total range bounded
-
-  const { ethers } = await import('ethers')
-  const mintedTopic = ethers.id('ProductMinted(uint256,address,string,uint256)')
-  const transferTopic = ethers.id('OwnershipTransferred(uint256,address,address,uint256)')
-
-  // Chunk into 10-block windows (Alchemy free tier limit) and query in parallel batches of 8
-  const CHUNK = 10, BATCH = 8
-  const ranges = []
-  for (let s = fromBlock; s <= latest; s += CHUNK) {
-    ranges.push([s, Math.min(s + CHUNK - 1, latest)])
+function decodeTokenMetadata(tokenURI) {
+  if (!tokenURI || typeof tokenURI !== 'string') return { metadata: null, ipfsCid: null }
+  let ipfsCid = null
+  if (tokenURI.startsWith('ipfs://')) ipfsCid = tokenURI.replace('ipfs://', '').split('/')[0]
+  if (!tokenURI.startsWith('data:application/json;base64,')) return { metadata: null, ipfsCid }
+  try {
+    const b64 = tokenURI.slice('data:application/json;base64,'.length)
+    return { metadata: JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')), ipfsCid }
+  } catch (_) {
+    return { metadata: null, ipfsCid }
   }
-  const allLogs = []
-  for (let i = 0; i < ranges.length; i += BATCH) {
-    const slice = ranges.slice(i, i + BATCH)
-    const results = await Promise.all(slice.flatMap(([f, t]) => [
-      provider.getLogs({ address: CONTRACT_ADDRESS, topics: [mintedTopic], fromBlock: f, toBlock: t }).catch(() => []),
-      provider.getLogs({ address: CONTRACT_ADDRESS, topics: [transferTopic], fromBlock: f, toBlock: t }).catch(() => []),
-    ]))
-    for (const arr of results) allLogs.push(...arr)
-  }
+}
 
-  const events = []
-  for (const log of allLogs) {
+function asNumber(value) {
+  if (value == null) return null
+  return Number(typeof value === 'bigint' ? value : value.toString ? value.toString() : value)
+}
+
+function withTimeout(promise, label, ms = 15000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+  ])
+}
+
+const EXPLORER_LIMIT_DEFAULT = 10
+const EXPLORER_LIMIT_MAX = 50
+const EXPLORER_CHUNK_SIZE = Number(process.env.EXPLORER_BLOCK_CHUNK_SIZE || 750)
+const EXPLORER_MAX_BLOCKS_PER_REQUEST = Number(process.env.EXPLORER_MAX_BLOCKS_PER_REQUEST || 3000)
+let explorerIndexesReady = false
+let explorerIndexPromise = null
+
+function clampPage(value) {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1
+}
+
+function clampLimit(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return EXPLORER_LIMIT_DEFAULT
+  return Math.min(Math.floor(n), EXPLORER_LIMIT_MAX)
+}
+
+async function ensureExplorerIndexes(db) {
+  if (explorerIndexesReady) return
+  await Promise.all([
+    db.collection('explorerEvents').createIndex({ id: 1 }, { unique: true }),
+    db.collection('explorerEvents').createIndex({ contractAddress: 1, blockNumber: -1, logIndex: -1 }),
+    db.collection('explorerEvents').createIndex({ contractAddress: 1, txHash: 1 }),
+    db.collection('explorerEvents').createIndex({ contractAddress: 1, tokenId: 1 }),
+    db.collection('explorerEvents').createIndex({ searchText: 'text' }),
+    db.collection('explorerBlocks').createIndex({ blockNumber: 1 }, { unique: true }),
+    db.collection('explorerTransactions').createIndex({ txHash: 1 }, { unique: true }),
+    db.collection('explorerState').createIndex({ contractAddress: 1 }, { unique: true }),
+  ])
+  explorerIndexesReady = true
+}
+
+async function getContractLogs(provider, fromBlock, toBlock) {
+  try {
+    return await withTimeout(provider.getLogs({ address: CONTRACT_ADDRESS, fromBlock, toBlock }), `Log scan ${fromBlock}-${toBlock}`, 15000)
+  } catch (e) {
+    if (fromBlock >= toBlock) return []
+    const mid = Math.floor((fromBlock + toBlock) / 2)
+    const [left, right] = await Promise.all([
+      getContractLogs(provider, fromBlock, mid),
+      getContractLogs(provider, mid + 1, toBlock),
+    ])
+    return [...left, ...right]
+  }
+}
+
+async function runExplorerIndex(db) {
+  if (!explorerIndexPromise) {
+    explorerIndexPromise = indexExplorerEvents(db).finally(() => { explorerIndexPromise = null })
+  }
+  return explorerIndexPromise
+}
+
+async function getCachedBlocks(db, provider, blockNumbers) {
+  const unique = [...new Set(blockNumbers.filter(Number.isFinite))]
+  if (!unique.length) return {}
+  const cached = await db.collection('explorerBlocks').find({ blockNumber: { $in: unique } }).toArray()
+  const map = Object.fromEntries(cached.map(b => [b.blockNumber, b]))
+  const missing = unique.filter(b => !map[b])
+  if (missing.length) {
+    const fetched = await Promise.all(missing.map(async blockNumber => {
+      try {
+        const block = await withTimeout(provider.getBlock(blockNumber), `Block ${blockNumber} lookup`)
+        return block ? { blockNumber, timestamp: block.timestamp || 0, hash: block.hash || null, indexedAt: new Date() } : null
+      } catch {
+        return { blockNumber, timestamp: 0, hash: null, indexedAt: new Date() }
+      }
+    }))
+    await Promise.all(fetched.filter(Boolean).map(block =>
+      db.collection('explorerBlocks').updateOne({ blockNumber: block.blockNumber }, { $set: block }, { upsert: true })
+    ))
+    for (const block of fetched.filter(Boolean)) map[block.blockNumber] = block
+  }
+  return map
+}
+
+async function getCachedTransactions(db, provider, txHashes) {
+  const unique = [...new Set(txHashes.filter(Boolean))]
+  if (!unique.length) return {}
+  const cached = await db.collection('explorerTransactions').find({ txHash: { $in: unique } }).toArray()
+  const map = Object.fromEntries(cached.map(tx => [tx.txHash, tx]))
+  const missing = unique.filter(h => !map[h])
+  if (missing.length) {
+    const fetched = await Promise.all(missing.map(async txHash => {
+      try {
+        const [tx, receipt] = await Promise.all([
+          withTimeout(provider.getTransaction(txHash), `Transaction ${txHash} lookup`),
+          withTimeout(provider.getTransactionReceipt(txHash), `Receipt ${txHash} lookup`),
+        ])
+        return {
+          txHash,
+          from: tx?.from || null,
+          to: tx?.to || null,
+          blockNumber: tx?.blockNumber || receipt?.blockNumber || null,
+          blockHash: tx?.blockHash || null,
+          value: tx?.value?.toString() || '0',
+          gasPrice: (tx?.gasPrice || receipt?.gasPrice)?.toString?.() || null,
+          gasUsed: receipt?.gasUsed?.toString?.() || null,
+          status: receipt?.status ?? null,
+          indexedAt: new Date(),
+        }
+      } catch {
+        return { txHash, indexedAt: new Date() }
+      }
+    }))
+    await Promise.all(fetched.map(tx =>
+      db.collection('explorerTransactions').updateOne({ txHash: tx.txHash }, { $set: tx }, { upsert: true })
+    ))
+    for (const tx of fetched) map[tx.txHash] = tx
+  }
+  return map
+}
+
+function buildSearchText(event, product, artisan) {
+  return [
+    event.txHash, event.type, event.eventType, event.tokenId, event.productId,
+    event.from, event.to, event.artisan, event.currentOwner,
+    product?.id, product?.name, product?.category, product?.ngoName, product?.registeredByName,
+    artisan?.name, artisan?.village, artisan?.district, artisan?.craftType,
+  ].filter(Boolean).join(' ').toLowerCase()
+}
+
+async function enrichExplorerEvents(db, events) {
+  const tokenIds = [...new Set(events.map(e => e.tokenId).filter(v => v != null))]
+  const products = tokenIds.length ? await db.collection('products').find({ tokenId: { $in: tokenIds }, contractAddress: CONTRACT_ADDRESS }).toArray() : []
+  const pMap = Object.fromEntries(products.map(p => [p.tokenId, clean(p)]))
+  const artisanIds = [...new Set(products.map(p => p.artisanId).filter(Boolean))]
+  const artisans = artisanIds.length ? await db.collection('artisans').find({ id: { $in: artisanIds } }).toArray() : []
+  const aMap = Object.fromEntries(artisans.map(a => [a.id, clean(a)]))
+
+  return events.map(e => {
+    const product = pMap[e.tokenId] || null
+    const artisan = product?.artisanId ? aMap[product.artisanId] : null
+    const uri = e.tokenURI || null
+    const { metadata, ipfsCid } = decodeTokenMetadata(uri)
+    const productName = product?.name || metadata?.name || e.productName || null
+    const artistName = artisan?.name || metadata?.attributes?.find?.(a => a.trait_type === 'Artisan')?.value || e.artistName || null
+    return {
+      ...clean(e),
+      productId: product?.id || e.productId || null,
+      productName,
+      artistName,
+      ngoName: product?.ngoName || product?.registeredByName || e.ngoName || 'Registered NGO',
+      currentOwner: product?.currentOwnerAddress || e.currentOwner || null,
+      metadataURI: uri,
+      ipfsCid: ipfsCid || e.ipfsCid || null,
+      certificateHash: product?.certificateHash || e.certificateHash || null,
+      verificationStatus: e.tokenId != null ? 'Verified on-chain' : e.status === 1 ? 'Confirmed' : 'Unknown',
+      product: product ? { ...product, artisan, metadata, ipfsCid } : { name: productName, artisan, metadata, ipfsCid },
+      explorerUrl: `${EXPLORER_URL}/tx/${e.txHash}`,
+    }
+  })
+}
+
+async function upsertExplorerLogs(db, provider, contract, logs) {
+  if (!logs.length) return 0
+  const parsedEvents = []
+  for (const log of logs) {
     try {
       const parsed = contract.interface.parseLog(log)
-      if (parsed.name === 'ProductMinted') {
-        events.push({ type: 'ProductMinted', tokenId: Number(parsed.args.tokenId), artisan: parsed.args.artisan,
-          tokenURI: parsed.args.tokenURI, timestamp: Number(parsed.args.timestamp),
-          blockNumber: log.blockNumber, txHash: log.transactionHash, logIndex: log.index })
-      } else if (parsed.name === 'OwnershipTransferred') {
-        events.push({ type: 'OwnershipTransferred', tokenId: Number(parsed.args.tokenId), from: parsed.args.from, to: parsed.args.to,
-          timestamp: Number(parsed.args.timestamp),
-          blockNumber: log.blockNumber, txHash: log.transactionHash, logIndex: log.index })
-      }
+      if (!parsed) continue
+      const argsObj = {}
+      parsed.fragment.inputs.forEach((inp, i) => {
+        const v = parsed.args[i]
+        argsObj[inp.name] = typeof v === 'bigint' ? v.toString() : v
+      })
+      const tokenId = asNumber(argsObj.tokenId)
+      const logIndex = log.index ?? log.logIndex ?? 0
+      parsedEvents.push({
+        id: `${log.transactionHash}:${logIndex}`,
+        contractAddress: CONTRACT_ADDRESS,
+        type: parsed.name,
+        eventType: parsed.name === 'Transfer' && argsObj.from === '0x0000000000000000000000000000000000000000' ? 'NFT Mint' : parsed.name,
+        tokenId,
+        productId: null,
+        from: argsObj.from || argsObj.previousOwner || null,
+        to: argsObj.to || argsObj.newOwner || null,
+        artisan: argsObj.artisan || null,
+        tokenURI: argsObj.tokenURI || null,
+        timestamp: asNumber(argsObj.timestamp),
+        blockNumber: log.blockNumber,
+        txHash: log.transactionHash,
+        logIndex,
+        args: argsObj,
+      })
     } catch(_) {}
   }
-  events.sort((a, b) => b.blockNumber - a.blockNumber || b.logIndex - a.logIndex)
-  return { events: events.slice(0, limit), latestBlock: latest, deploymentBlock: deployed, fromBlock }
+  if (!parsedEvents.length) return 0
+
+  const [blockMap, txMap] = await Promise.all([
+    getCachedBlocks(db, provider, parsedEvents.map(e => e.blockNumber)),
+    getCachedTransactions(db, provider, parsedEvents.map(e => e.txHash)),
+  ])
+  const tokenIds = [...new Set(parsedEvents.map(e => e.tokenId).filter(v => v != null))]
+  const products = tokenIds.length ? await db.collection('products').find({ tokenId: { $in: tokenIds }, contractAddress: CONTRACT_ADDRESS }).toArray() : []
+  const pMap = Object.fromEntries(products.map(p => [p.tokenId, clean(p)]))
+  const artisanIds = [...new Set(products.map(p => p.artisanId).filter(Boolean))]
+  const artisans = artisanIds.length ? await db.collection('artisans').find({ id: { $in: artisanIds } }).toArray() : []
+  const aMap = Object.fromEntries(artisans.map(a => [a.id, clean(a)]))
+
+  await Promise.all(parsedEvents.map(e => {
+    const product = pMap[e.tokenId] || null
+    const artisan = product?.artisanId ? aMap[product.artisanId] : null
+    const block = blockMap[e.blockNumber] || {}
+    const tx = txMap[e.txHash] || {}
+    const { metadata, ipfsCid } = decodeTokenMetadata(e.tokenURI)
+    const productName = product?.name || metadata?.name || null
+    const artistName = artisan?.name || metadata?.attributes?.find?.(a => a.trait_type === 'Artisan')?.value || null
+    const doc = {
+      ...e,
+      blockHash: block.hash || tx.blockHash || null,
+      blockTimestamp: block.timestamp || e.timestamp || null,
+      gasUsed: tx.gasUsed || null,
+      gasPrice: tx.gasPrice || null,
+      status: tx.status ?? null,
+      network: 'Sepolia',
+      currentOwner: product?.currentOwnerAddress || e.to || null,
+      from: e.from || tx.from || null,
+      to: e.to || tx.to || null,
+      productId: product?.id || null,
+      productName,
+      artistName,
+      ngoName: product?.ngoName || product?.registeredByName || null,
+      metadataURI: e.tokenURI || null,
+      ipfsCid,
+      certificateHash: product?.certificateHash || null,
+      verificationStatus: e.tokenId != null ? 'Verified on-chain' : tx.status === 1 ? 'Confirmed' : 'Unknown',
+      searchText: buildSearchText({ ...e, currentOwner: product?.currentOwnerAddress || e.to || null }, product, artisan),
+      indexedAt: new Date(),
+    }
+    return db.collection('explorerEvents').updateOne({ id: doc.id }, { $set: doc }, { upsert: true })
+  }))
+  return parsedEvents.length
+}
+
+async function indexExplorerEvents(db) {
+  await ensureExplorerIndexes(db)
+  const contract = getContract(false)
+  const provider = getProvider()
+  const [latest, deployed, state] = await Promise.all([
+    withTimeout(provider.getBlockNumber(), 'Latest block lookup'),
+    withTimeout(getDeploymentBlock(), 'Deployment block lookup'),
+    db.collection('explorerState').findOne({ contractAddress: CONTRACT_ADDRESS }),
+  ])
+  const deploymentBlock = deployed || 0
+  const lastScannedBlock = Math.max(state?.lastScannedBlock ?? deploymentBlock - 1, deploymentBlock - 1)
+  const targetBlock = Math.min(latest, lastScannedBlock + EXPLORER_MAX_BLOCKS_PER_REQUEST)
+  let scannedToBlock = lastScannedBlock
+  let indexedEvents = 0
+
+  for (let fromBlock = lastScannedBlock + 1; fromBlock <= targetBlock; fromBlock += EXPLORER_CHUNK_SIZE) {
+    const toBlock = Math.min(targetBlock, fromBlock + EXPLORER_CHUNK_SIZE - 1)
+    const logs = await getContractLogs(provider, fromBlock, toBlock)
+    indexedEvents += await upsertExplorerLogs(db, provider, contract, logs)
+    scannedToBlock = toBlock
+    await db.collection('explorerState').updateOne(
+      { contractAddress: CONTRACT_ADDRESS },
+      { $set: { contractAddress: CONTRACT_ADDRESS, deploymentBlock, latestBlock: latest, lastScannedBlock: scannedToBlock, updatedAt: new Date() } },
+      { upsert: true }
+    )
+  }
+
+  if (lastScannedBlock >= latest) {
+    await db.collection('explorerState').updateOne(
+      { contractAddress: CONTRACT_ADDRESS },
+      { $set: { contractAddress: CONTRACT_ADDRESS, deploymentBlock, latestBlock: latest, updatedAt: new Date() } },
+      { upsert: true }
+    )
+  }
+
+  return {
+    latestBlock: latest,
+    deploymentBlock,
+    fromBlock: deploymentBlock,
+    lastScannedBlock: scannedToBlock,
+    isIndexing: scannedToBlock < latest,
+    indexedEvents,
+  }
+}
+
+function explorerQueryFromParams(url) {
+  const page = clampPage(url.searchParams.get('page'))
+  const limit = clampLimit(url.searchParams.get('limit'))
+  const q = (url.searchParams.get('q') || '').trim()
+  const eventType = url.searchParams.get('eventType') || url.searchParams.get('eventFilter') || 'All Events'
+  const status = url.searchParams.get('status') || 'all'
+  const date = url.searchParams.get('date') || ''
+  const block = url.searchParams.get('block') || ''
+  const filter = { contractAddress: CONTRACT_ADDRESS }
+  if (eventType && eventType !== 'All Events') {
+    const map = {
+      Mint: ['ProductMinted', 'NFT Mint'],
+      Verification: ['ProductVerified'],
+      'Ownership Transfer': ['OwnershipTransferred', 'Transfer'],
+      'Metadata Update': ['MetadataUpdated', 'MetadataUpdate', 'MetadataUpdateBatch'],
+    }
+    filter.eventType = { $in: map[eventType] || [eventType] }
+  }
+  if (status === 'success') filter.status = 1
+  if (status === 'failed') filter.status = { $ne: 1 }
+  if (block && /^\d+$/.test(block.trim())) filter.blockNumber = Number(block.trim())
+  if (date) {
+    const start = Math.floor(new Date(`${date}T00:00:00.000Z`).getTime() / 1000)
+    const end = start + 86400
+    if (Number.isFinite(start)) filter.blockTimestamp = { $gte: start, $lt: end }
+  }
+  if (q) filter.searchText = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+  return { page, limit, filter, q }
+}
+
+async function fetchIndexedExplorerEvents({ db, url }) {
+  await ensureExplorerIndexes(db)
+  const indexState = await runExplorerIndex(db)
+  const { page, limit, filter } = explorerQueryFromParams(url)
+  const skip = (page - 1) * limit
+  const [events, totalTransactions, totalIndexedEvents] = await Promise.all([
+    db.collection('explorerEvents').find(filter).sort({ blockNumber: -1, logIndex: -1 }).skip(skip).limit(limit).toArray(),
+    db.collection('explorerEvents').countDocuments(filter),
+    db.collection('explorerEvents').countDocuments({ contractAddress: CONTRACT_ADDRESS }),
+  ])
+  const transactions = await enrichExplorerEvents(db, events)
+  const totalPages = Math.max(1, Math.ceil(totalTransactions / limit))
+  return {
+    transactions,
+    events: transactions,
+    totalTransactions,
+    totalIndexedEvents,
+    totalEvents: totalTransactions,
+    currentPage: page,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
+    latestBlock: indexState.latestBlock,
+    deploymentBlock: indexState.deploymentBlock,
+    fromBlock: indexState.fromBlock,
+    lastScannedBlock: indexState.lastScannedBlock,
+    isIndexing: indexState.isIndexing,
+    indexedThisRequest: indexState.indexedEvents,
+  }
 }
 
 async function handler(request, { params }) {
@@ -354,25 +675,51 @@ async function handler(request, { params }) {
     // ---------- Explorer ----------
     if (route === '/explorer/feed' && method === 'GET') {
       const url = new URL(request.url)
-      const limit = Math.min(Number(url.searchParams.get('limit') || 50), 100)
-      const { events, latestBlock, deploymentBlock, fromBlock } = await fetchContractEvents({ limit })
-      // enrich with block timestamps (batch unique blockNumbers)
-      const uniqueBlocks = [...new Set(events.map(e => e.blockNumber))]
-      const provider = getProvider()
-      const blockInfo = await Promise.all(uniqueBlocks.map(async b => {
-        try { const bk = await provider.getBlock(b); return [b, bk?.timestamp || 0] } catch { return [b, 0] }
-      }))
-      const bMap = Object.fromEntries(blockInfo)
-      const enriched = events.map(e => ({ ...e, blockTimestamp: bMap[e.blockNumber] || e.timestamp }))
-      return ok({ events: enriched, latestBlock, deploymentBlock, fromBlock, contractAddress: CONTRACT_ADDRESS })
+      const feed = await fetchIndexedExplorerEvents({ db, url })
+      return ok({ ...feed, contractAddress: CONTRACT_ADDRESS, network: 'Sepolia' })
     }
     if (path[0] === 'explorer' && path[1] === 'tx' && path.length === 3 && method === 'GET') {
       const hash = path[2]
       try {
+        await ensureExplorerIndexes(db)
+        const [indexedTx, indexedEvents] = await Promise.all([
+          db.collection('explorerTransactions').findOne({ txHash: hash }),
+          db.collection('explorerEvents').find({ contractAddress: CONTRACT_ADDRESS, txHash: hash }).sort({ logIndex: 1 }).toArray(),
+        ])
+        if (indexedTx) {
+          const block = indexedTx.blockNumber ? await db.collection('explorerBlocks').findOne({ blockNumber: indexedTx.blockNumber }) : null
+          const parsedLogs = indexedEvents.map(e => ({ name: e.type, args: e.args || {} }))
+          const productTokenIds = [...new Set(indexedEvents.map(e => e.tokenId).filter(v => v != null))]
+          const products = productTokenIds.length ? await db.collection('products').find({ tokenId: { $in: productTokenIds }, contractAddress: CONTRACT_ADDRESS }).toArray() : []
+          const artisanIds = [...new Set(products.map(p => p.artisanId).filter(Boolean))]
+          const artisans = artisanIds.length ? await db.collection('artisans').find({ id: { $in: artisanIds } }).toArray() : []
+          const aMap = Object.fromEntries(artisans.map(a => [a.id, clean(a)]))
+          const enrichedProducts = products.map(p => {
+            const artisan = p.artisanId ? aMap[p.artisanId] : null
+            return { ...clean(p), artisan: artisan ? clean(artisan) : null }
+          })
+          return ok({
+            hash: indexedTx.txHash, from: indexedTx.from, to: indexedTx.to,
+            blockNumber: indexedTx.blockNumber, blockHash: indexedTx.blockHash || block?.hash || null,
+            value: indexedTx.value || '0',
+            gasUsed: indexedTx.gasUsed || null,
+            gasPrice: indexedTx.gasPrice || null,
+            status: indexedTx.status ?? null,
+            timestamp: block?.timestamp || null,
+            date: block?.timestamp ? new Date(block.timestamp * 1000).toISOString() : null,
+            network: 'Sepolia',
+            events: parsedLogs,
+            products: enrichedProducts,
+            explorerUrl: `${EXPLORER_URL}/tx/${indexedTx.txHash}`,
+          })
+        }
         const provider = getProvider()
-        const [tx, receipt] = await Promise.all([provider.getTransaction(hash), provider.getTransactionReceipt(hash)])
+        const [tx, receipt] = await Promise.all([
+          withTimeout(provider.getTransaction(hash), `Transaction ${hash} lookup`),
+          withTimeout(provider.getTransactionReceipt(hash), `Receipt ${hash} lookup`),
+        ])
         if (!tx) return err('Transaction not found', 404)
-        const block = tx.blockNumber ? await provider.getBlock(tx.blockNumber) : null
+        const block = tx.blockNumber ? await withTimeout(provider.getBlock(tx.blockNumber), `Block ${tx.blockNumber} lookup`) : null
         // parse logs against contract iface if from our contract
         const contract = getContract(false)
         const parsedLogs = []
@@ -389,18 +736,54 @@ async function handler(request, { params }) {
             }
           } catch(_) {}
         }
+        const productTokenIds = [...new Set(parsedLogs.map(e => Number(e.args?.tokenId)).filter(Number.isFinite))]
+        const products = productTokenIds.length ? await db.collection('products').find({ tokenId: { $in: productTokenIds }, contractAddress: CONTRACT_ADDRESS }).toArray() : []
+        const artisanIds = [...new Set(products.map(p => p.artisanId).filter(Boolean))]
+        const artisans = artisanIds.length ? await db.collection('artisans').find({ id: { $in: artisanIds } }).toArray() : []
+        const aMap = Object.fromEntries(artisans.map(a => [a.id, clean(a)]))
+        const enrichedProducts = products.map(p => {
+          const artisan = p.artisanId ? aMap[p.artisanId] : null
+          return { ...clean(p), artisan: artisan ? clean(artisan) : null }
+        })
         return ok({
           hash: tx.hash, from: tx.from, to: tx.to,
           blockNumber: tx.blockNumber, blockHash: tx.blockHash,
           value: tx.value?.toString() || '0',
           gasUsed: receipt?.gasUsed?.toString() || null,
+          gasPrice: (tx.gasPrice || receipt?.gasPrice)?.toString?.() || null,
           status: receipt?.status ?? null,
           timestamp: block?.timestamp || null,
           date: block ? new Date(block.timestamp * 1000).toISOString() : null,
+          network: 'Sepolia',
           events: parsedLogs,
+          products: enrichedProducts,
           explorerUrl: `${EXPLORER_URL}/tx/${tx.hash}`,
         })
       } catch (e) { return err(e.shortMessage || e.message, 500) }
+    }
+    if (route === '/explorer/search' && method === 'GET') {
+      const url = new URL(request.url)
+      const q = (url.searchParams.get('q') || '').trim()
+      if (!q) return ok({ type: 'empty' })
+      await ensureExplorerIndexes(db)
+      if (/^0x[a-fA-F0-9]{64}$/.test(q)) {
+        const tx = await db.collection('explorerEvents').findOne({ contractAddress: CONTRACT_ADDRESS, txHash: q })
+        return tx ? ok({ type: 'tx', hash: q }) : ok({ type: 'not_found', reason: 'Transaction is not indexed yet' })
+      }
+      if (/^\d+$/.test(q)) {
+        const tokenId = Number(q)
+        const event = await db.collection('explorerEvents').findOne(
+          { contractAddress: CONTRACT_ADDRESS, tokenId },
+          { sort: { blockNumber: -1, logIndex: -1 } }
+        )
+        return event ? ok({ type: 'token', tokenId, currentOwner: event.currentOwner || event.to || null, mintTimestamp: event.blockTimestamp || event.timestamp || null }) : ok({ type: 'not_found', reason: 'Token is not indexed yet' })
+      }
+      const matches = await db.collection('explorerEvents')
+        .find({ contractAddress: CONTRACT_ADDRESS, searchText: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } })
+        .sort({ blockNumber: -1, logIndex: -1 })
+        .limit(10)
+        .toArray()
+      return ok({ type: matches.length ? 'events' : 'not_found', transactions: await enrichExplorerEvents(db, matches), totalTransactions: matches.length })
     }
     if (route === '/explorer/search' && method === 'GET') {
       const url = new URL(request.url)
@@ -411,13 +794,11 @@ async function handler(request, { params }) {
       // token id?
       if (/^\d+$/.test(q)) {
         const tokenId = Number(q)
-        try {
-          const contract = getContract(false)
-          const r = await contract.verifyProduct(tokenId)
-          return ok({ type: 'token', tokenId, currentOwner: r[0], mintTimestamp: Number(r[2]) })
-        } catch (e) {
-          return ok({ type: 'not_found', reason: 'Token does not exist' })
-        }
+        const event = await db.collection('explorerEvents').findOne(
+          { contractAddress: CONTRACT_ADDRESS, tokenId },
+          { sort: { blockNumber: -1, logIndex: -1 } }
+        )
+        return event ? ok({ type: 'token', tokenId, currentOwner: event.currentOwner || event.to || null, mintTimestamp: event.blockTimestamp || event.timestamp || null }) : ok({ type: 'not_found', reason: 'Token is not indexed yet' })
       }
       return ok({ type: 'unknown', reason: 'Enter a tx hash (0x…) or a token id (number)' })
     }

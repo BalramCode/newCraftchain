@@ -34,7 +34,7 @@ function CartPage() {
     } catch(e) { alert('Wallet connect failed') }
   }
 
-  const total = cart.reduce((s,i)=> s + Number(i.price), 0)
+  const total = cart.reduce((s,i)=> s + Number(i.price) * Number(i.quantity || 1), 0)
 
   const checkout = async () => {
     const token = localStorage.getItem('cc_token')
@@ -120,6 +120,14 @@ function CartPage() {
                   <div className="flex-1">
                     <div className="font-heading font-bold text-[16px] text-[#2C1E21]">{item.name}</div>
                     <div className="text-[12px] text-[#6E5A5E]">Token #{item.tokenId}</div>
+                    {item.variants && Object.keys(item.variants).length > 0 && (
+                      <div className="mt-1 text-[12px] text-[#6E5A5E]">
+                        {Object.entries(item.variants).map(([name, value]) => `${name}: ${value}`).join(' · ')}
+                      </div>
+                    )}
+                    {Number(item.quantity || 1) > 1 && (
+                      <div className="mt-1 text-[12px] font-semibold text-[#702935]">Qty {item.quantity}</div>
+                    )}
                   </div>
                   <div className="font-heading font-bold text-[16px] text-[#2C1E21]">₹{Number(item.price).toLocaleString('en-IN')}</div>
                   <button onClick={()=>remove(item.id)} className="p-2 text-[#6E5A5E] hover:text-[#8B2635]"><Trash2 size={16}/></button>

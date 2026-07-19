@@ -192,17 +192,24 @@ function ProductDetail() {
             <div className="bg-white border border-[#E7DDD6]/60 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[#6E5A5E] font-medium">Price</p>
-                  <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                    <span className="font-heading text-3xl sm:text-4xl font-black text-[#2C1E21]">
+                  <p className="text-[10px] uppercase tracking-wider text-[#6E5A5E] font-semibold">
+                    Price
+                  </p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2.5">
+                    {/* Dynamic Current Selling Price */}
+                    <span className="font-heading text-2xl sm:text-3xl font-bold text-[#2C1E21]">
                       ₹{discountedPrice.toLocaleString('en-IN')}
                     </span>
+
                     {hasDiscount && (
                       <>
-                        <span className="text-[15px] font-semibold text-[#9C8A8E] line-through">
+                        {/* Dynamic Original Price with Strike-through */}
+                        <span className="text-sm font-medium text-[#9C8A8E] line-through">
                           ₹{originalPrice.toLocaleString('en-IN')}
                         </span>
-                        <span className="rounded-full bg-[#00897B]/10 px-2.5 py-1 text-[12px] font-bold text-[#00897B]">
+
+                        {/* Dynamic Discount Badge */}
+                        <span className="rounded bg-[#E3F2FD] px-2 py-0.5 text-[11px] font-bold text-[#00BFA5]">
                           {discountPercentage}% off
                         </span>
                       </>
@@ -255,11 +262,10 @@ function ProductDetail() {
                                 key={value}
                                 type="button"
                                 onClick={() => setSelectedVariants(prev => ({ ...prev, [name]: value }))}
-                                className={`min-h-11 rounded-xl border px-4 text-[13px] font-semibold transition ${
-                                  selected
+                                className={`min-h-11 rounded-xl border px-4 text-[13px] font-semibold transition ${selected
                                     ? 'border-[#702935] bg-[#702935] text-white'
                                     : 'border-[#E7DDD6] bg-[#FAF8F6] text-[#2C1E21] hover:border-[#702935]'
-                                }`}
+                                  }`}
                               >
                                 {value}
                               </button>
@@ -283,9 +289,8 @@ function ProductDetail() {
                   type="button"
                   onClick={() => addToCart()}
                   disabled={purchaseDisabled}
-                  className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-bold transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-55 ${
-                    added ? 'bg-[#00897B] text-white' : 'bg-[#702935] text-white hover:bg-[#59202A] hover:-translate-y-0.5'
-                  }`}
+                  className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-bold transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-55 ${added ? 'bg-[#00897B] text-white' : 'bg-[#702935] text-white hover:bg-[#59202A] hover:-translate-y-0.5'
+                    }`}
                 >
                   {added ? <><Check size={18} /> Added to Cart</> : <><ShoppingBag size={18} /> Add to Cart</>}
                 </button>
@@ -301,30 +306,30 @@ function ProductDetail() {
             </div>
 
             <div className="hidden" aria-hidden="true">
-            {/* Price Area */}
-            <div className="bg-white border border-[#E7DDD6]/60 rounded-2xl p-5 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-[#6E5A5E] font-medium">Price Valuation</p>
-                <div className="font-heading text-3xl font-black text-[#2C1E21] mt-0.5">
-                  ₹{Number(product.price).toLocaleString('en-IN')}
+              {/* Price Area */}
+              <div className="bg-white border border-[#E7DDD6]/60 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-[#6E5A5E] font-medium">Price Valuation</p>
+                  <div className="font-heading text-3xl font-black text-[#2C1E21] mt-0.5">
+                    ₹{Number(product.price).toLocaleString('en-IN')}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex sm:items-center gap-2.5">
-                <button
-                  onClick={addToCart}
-                  className={`px-6 py-3.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm ${added
+                <div className="flex sm:items-center gap-2.5">
+                  <button
+                    onClick={addToCart}
+                    className={`px-6 py-3.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm ${added
                       ? 'bg-[#00897B] text-white'
                       : 'bg-[#702935] text-white hover:bg-[#59202A]'
-                    }`}
-                >
-                  {added ? <><Check size={16} /> Added to Bag</> : <><ShoppingBag size={16} /> Secure Artifact</>}
-                </button>
-                <Link href="/cart" className="border border-[#E7DDD6] bg-white text-[#2C1E21] hover:border-[#702935] px-4 py-3.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5">
-                  Bag <ArrowRight size={15} />
-                </Link>
+                      }`}
+                  >
+                    {added ? <><Check size={16} /> Added to Bag</> : <><ShoppingBag size={16} /> Secure Artifact</>}
+                  </button>
+                  <Link href="/cart" className="border border-[#E7DDD6] bg-white text-[#2C1E21] hover:border-[#702935] px-4 py-3.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5">
+                    Bag <ArrowRight size={15} />
+                  </Link>
+                </div>
               </div>
-            </div>
 
             </div>
 
@@ -333,7 +338,7 @@ function ProductDetail() {
               <h3 className="text-sm font-semibold tracking-tight text-[#702935] uppercase border-b border-[#E7DDD6]/60 pb-2">
                 Specifications
               </h3>
-              
+
               <div className="bg-white border border-[#E7DDD6]/50 rounded-xl divide-y divide-[#E7DDD6]/40 overflow-hidden text-sm shadow-sm">
                 <div className="grid grid-cols-3 p-3.5">
                   <span className="text-[#6E5A5E] font-medium">Materials Used</span>

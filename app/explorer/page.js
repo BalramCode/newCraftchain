@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
@@ -30,8 +30,12 @@ function Inner() {
   const [dateFilter, setDateFilter] = useState('')
   const [blockFilter, setBlockFilter] = useState('')
   const [page, setPage] = useState(1)
+  const requestRef = useRef(null)
 
   const loadFeed = async ({ quiet = false, nextPage = 1, append = false } = {}) => {
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
     if (quiet) setRefreshing(true)
     else setLoading(true)
     try {
@@ -44,7 +48,7 @@ function Inner() {
         date: dateFilter,
         block: blockFilter.trim(),
       })
-      const d = await fetch(`/api/explorer/feed?${qs.toString()}`, { cache: 'no-store' }).then(r => r.json())
+      const d = await fetch(`/api/explorer/feed?${qs.toString()}`, { cache: 'no-store', signal: controller.signal }).then(r => r.json())
       if (d.error) {
         setError(d.error)
         setFeed(prev => append ? prev : ({ ...prev, events: [], totalEvents: 0, totalTransactions: 0 }))
@@ -59,6 +63,8 @@ function Inner() {
         totalTransactions: d.totalTransactions ?? d.totalEvents ?? 0,
       }))
       setPage(d.currentPage || nextPage)
+    } catch (err) {
+      if (err.name !== 'AbortError') setError(err.message || 'Unable to load explorer feed')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -66,9 +72,11 @@ function Inner() {
   }
 
   useEffect(() => {
-    const id = setInterval(() => loadFeed({ quiet: true, nextPage: 1 }), 30000)
+    const id = setInterval(() => loadFeed({ quiet: true, nextPage: 1 }), feed.isIndexing ? 5000 : 30000)
     return () => clearInterval(id)
-  }, [query, eventFilter, statusFilter, dateFilter, blockFilter])
+  }, [query, eventFilter, statusFilter, dateFilter, blockFilter, feed.isIndexing])
+
+  useEffect(() => () => requestRef.current?.abort(), [])
 
   useEffect(() => {
     const id = setTimeout(() => loadFeed({ nextPage: 1 }), 250)

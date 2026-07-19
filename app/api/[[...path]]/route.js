@@ -65,6 +65,17 @@ const EXPLORER_CHUNK_SIZE = Number(process.env.EXPLORER_BLOCK_CHUNK_SIZE || 750)
 const EXPLORER_MAX_BLOCKS_PER_REQUEST = Number(process.env.EXPLORER_MAX_BLOCKS_PER_REQUEST || 3000)
 let explorerIndexesReady = false
 let explorerIndexPromise = null
+let latestBlockCache = { value: null, expiresAt: 0, pending: null }
+
+async function getLatestBlock(provider) {
+  if (latestBlockCache.value != null && Date.now() < latestBlockCache.expiresAt) return latestBlockCache.value
+  if (!latestBlockCache.pending) {
+    latestBlockCache.pending = withTimeout(provider.getBlockNumber(), 'Latest block lookup')
+      .then(value => { latestBlockCache.value = value; latestBlockCache.expiresAt = Date.now() + 12000; return value })
+      .finally(() => { latestBlockCache.pending = null })
+  }
+  return latestBlockCache.pending
+}
 
 function clampPage(value) {
   const n = Number(value)
@@ -300,7 +311,7 @@ async function indexExplorerEvents(db) {
   const contract = getContract(false)
   const provider = getProvider()
   const [latest, deployed, state] = await Promise.all([
-    withTimeout(provider.getBlockNumber(), 'Latest block lookup'),
+    getLatestBlock(provider),
     withTimeout(getDeploymentBlock(), 'Deployment block lookup'),
     db.collection('explorerState').findOne({ contractAddress: CONTRACT_ADDRESS }),
   ])
@@ -372,7 +383,10 @@ function explorerQueryFromParams(url) {
 
 async function fetchIndexedExplorerEvents({ db, url }) {
   await ensureExplorerIndexes(db)
-  const indexState = await runExplorerIndex(db)
+  // Do not make the feed wait for on-chain catch-up work.
+  const startedAt = Date.now()
+  const indexState = await db.collection('explorerState').findOne({ contractAddress: CONTRACT_ADDRESS })
+  void runExplorerIndex(db).catch(error => console.warn('Explorer indexer failed:', error.message))
   const { page, limit, filter } = explorerQueryFromParams(url)
   const skip = (page - 1) * limit
   const [events, totalTransactions, totalIndexedEvents] = await Promise.all([
@@ -392,12 +406,13 @@ async function fetchIndexedExplorerEvents({ db, url }) {
     totalPages,
     hasNextPage: page < totalPages,
     hasPreviousPage: page > 1,
-    latestBlock: indexState.latestBlock,
-    deploymentBlock: indexState.deploymentBlock,
-    fromBlock: indexState.fromBlock,
-    lastScannedBlock: indexState.lastScannedBlock,
-    isIndexing: indexState.isIndexing,
-    indexedThisRequest: indexState.indexedEvents,
+    latestBlock: indexState?.latestBlock || null,
+    deploymentBlock: indexState?.deploymentBlock || null,
+    fromBlock: indexState?.deploymentBlock || null,
+    lastScannedBlock: indexState?.lastScannedBlock || null,
+    isIndexing: Boolean(explorerIndexPromise) || Boolean(indexState?.lastScannedBlock && indexState?.latestBlock && indexState.lastScannedBlock < indexState.latestBlock),
+    indexedThisRequest: 0,
+    performance: { databaseMs: Date.now() - startedAt, rpcCallsOnRequest: 0 },
   }
 }
 

@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { motion,AnimatePresence  } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { Reveal } from '@/components/Motion'

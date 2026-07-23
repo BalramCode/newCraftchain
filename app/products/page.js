@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
-import { Search, ShieldCheck, ArrowRight, Layers, Hammer, Box } from 'lucide-react'
+import { Search, Heart, ShieldCheck, ArrowRight, Layers, Hammer, Box } from 'lucide-react'
 
 function ProductsPage() {
   const [products, setProducts] = useState([])
@@ -77,8 +77,8 @@ function ProductsPage() {
                 key={c}
                 onClick={() => setCategory(c === 'All' ? '' : c)}
                 className={`px-4 py-1.5 rounded-lg text-[13px] font-medium border transition-all shrink-0 duration-200 ${isActive
-                    ? 'bg-[#702935] text-white border-[#702935] shadow-sm'
-                    : 'bg-white text-[#2C1E21] border-[#E7DDD6] hover:bg-[#FAF8F6] hover:border-[#702935]'
+                  ? 'bg-[#702935] text-white border-[#702935] shadow-sm'
+                  : 'bg-white text-[#2C1E21] border-[#E7DDD6] hover:bg-[#FAF8F6] hover:border-[#702935]'
                   }`}
               >
                 {c}
@@ -113,69 +113,79 @@ function ProductsPage() {
           </div>
         ) : (
           /* Responsive Balanced Grid Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map(p => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+            {products.map((p) => (
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                className="group bg-white rounded-2xl border border-[#E7DDD6]/60 overflow-hidden hover:border-[#702935]/40 hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+                className="group bg-white rounded-xl border border-[#E7DDD6]/70 overflow-hidden hover:border-[#702935]/50 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between relative"
               >
                 <div>
-                  {/* Aspect Square Image Canvas */}
-                  <div className="aspect-square overflow-hidden bg-[#FAF8F6] relative border-b border-[#E7DDD6]/30">
+                  {/* Compact Image Container */}
+                  <div className="aspect-[4/3] sm:aspect-square overflow-hidden bg-[#FAF8F6] relative border-b border-[#E7DDD6]/30">
                     <img
                       src={p.images?.[0]}
                       alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
+
+                    {/* Token Tag - Compact */}
                     {p.tokenId != null && (
-                      <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm border border-[#E7DDD6] text-[#00897B] text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
-                        <ShieldCheck size={11} /> Token #{p.tokenId}
+                      <span className="absolute top-1.5 left-1.5 bg-white/90 backdrop-blur-sm border border-[#E7DDD6] text-[#00897B] text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-xs">
+                        <ShieldCheck size={10} /> #{p.tokenId}
                       </span>
                     )}
+
+                    {/* Interactive Wishlist Button (Flipkart style) */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        // Wishlist toggle logic
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/80 backdrop-blur-xs text-[#6E5A5E] hover:text-[#702935] hover:bg-white transition-colors shadow-xs"
+                      aria-label="Add to Wishlist"
+                    >
+                      <Heart size={13} />
+                    </button>
                   </div>
 
-                  {/* Body Content */}
-                  <div className="pt-4 px-4">
-                    {/* Category Header Tag */}
-                    <span className="text-[11px] font-semibold text-[#702935] tracking-wider uppercase opacity-80 block mb-1">
+                  {/* Content Body */}
+                  <div className="p-2.5">
+                    {/* Category */}
+                    {/* <span className="text-[9px] font-bold text-[#702935] tracking-wider uppercase opacity-80 block mb-0.5 truncate">
                       {p.category}
-                    </span>
+                    </span> */}
 
-                    {/* Flex container pushing material & craft details cleanly to the right side */}
-<div className="flex justify-between items-start gap-3">
-  {/* Left Side: Product Name */}
-  <div className="flex-1 min-w-0">
-    {/* Added 'capitalize' class to ensure the product name has a capital first letter */}
-    <h3 className="font-heading text-[15px] font-bold text-[#2C1E21] tracking-tight leading-snug group-hover:text-[#702935] transition-colors line-clamp-2 capitalize">
-      {p.name}
-    </h3>
-  </div>
+                    {/* Product Name */}
+                    <h3 className="font-heading text-xs font-semibold text-[#2C1E21] leading-tight group-hover:text-[#702935] transition-colors line-clamp-1 capitalize mb-1.5">
+                      {p.name}
+                    </h3>
 
-  {/* Right Side: Specs Box aligned cleanly to the right margin */}
-  <div className="space-y-1 shrink-0 text-right">
-    <div className="flex items-center justify-end gap-1 text-[12px] text-[#6E5A5E]">
-      <Box size={12} className="text-[#6E5A5E]/60 shrink-0" />
-      {/* Added 'capitalize' to the nested span for materials */}
-      <span className="text-[#6E5A5E]">Material: <span className="text-[#2C1E21] font-medium capitalize">{p.materials || 'Organic'}</span></span>
-    </div>
-    <div className="flex items-center justify-end gap-1 text-[12px] text-[#6E5A5E]">
-      <Hammer size={12} className="text-[#6E5A5E]/60 shrink-0" />
-      {/* Added 'capitalize' to the nested span for craftType */}
-      <span className="text-[#6E5A5E]">Craft: <span className="text-[#2C1E21] font-medium capitalize">{p.artisan?.craftType || 'Handloom'}</span></span>
-    </div>
-  </div>
-</div>
+                    {/* Inline Micro Specs (Saves vertical space) */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#6E5A5E] mb-1">
+                      <span className="flex items-center gap-0.5 truncate max-w-[50%]">
+                        <Box size={10} className="shrink-0 opacity-60" />
+                        <span className="truncate capitalize">{p.materials || 'Organic'}</span>
+                      </span>
+                      <span className="flex items-center gap-0.5 truncate max-w-[50%]">
+                        <Hammer size={10} className="shrink-0 opacity-60" />
+                        <span className="truncate capitalize">{p.artisan?.craftType || 'Handloom'}</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Bottom Row Footer */}
-                <div className="px-4 pb-4 pt-2 flex items-center justify-between border-t border-[#E7DDD6]/20 bg-[#FAF8F6]/30">
-                  <div className="font-heading font-extrabold text-[16px] text-[#2C1E21]">
-                    ₹{Number(p.price).toLocaleString('en-IN')}
+                {/* Compact Price & Action Footer */}
+                <div className="px-2.5 pb-2.5 pt-1.5 flex items-center justify-between border-t border-[#E7DDD6]/30 bg-[#FAF8F6]/40 mt-auto">
+                  <div>
+                    <div className="font-heading font-extrabold text-sm text-[#2C1E21] leading-none">
+                      ₹{Number(p.price).toLocaleString('en-IN')}
+                    </div>
                   </div>
-                  <span className="text-[12px] font-medium text-[#702935] flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
-                    View Details <ArrowRight size={12} />
+
+                  <span className="text-[11px] font-semibold text-[#702935] flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+                    View <ArrowRight size={11} />
                   </span>
                 </div>
               </Link>

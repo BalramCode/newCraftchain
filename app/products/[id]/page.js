@@ -263,8 +263,8 @@ function ProductDetail() {
                                 type="button"
                                 onClick={() => setSelectedVariants(prev => ({ ...prev, [name]: value }))}
                                 className={`min-h-11 rounded-xl border px-4 text-[13px] font-semibold transition ${selected
-                                    ? 'border-[#702935] bg-[#702935] text-white'
-                                    : 'border-[#E7DDD6] bg-[#FAF8F6] text-[#2C1E21] hover:border-[#702935]'
+                                  ? 'border-[#702935] bg-[#702935] text-white'
+                                  : 'border-[#E7DDD6] bg-[#FAF8F6] text-[#2C1E21] hover:border-[#702935]'
                                   }`}
                               >
                                 {value}

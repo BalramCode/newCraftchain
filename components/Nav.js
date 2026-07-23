@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShoppingBag, Search, Shield, LayoutDashboard, LogOut, User, Menu, X } from 'lucide-react'
+import { ShoppingBag, ShieldCheck, Compass, LayoutDashboard, LogOut, User, Menu, X } from 'lucide-react'
 
 export default function Nav() {
   const [user, setUser] = useState(null)
@@ -43,12 +43,11 @@ export default function Nav() {
     setMobileOpen(false)
     router.push('/')
   }
-
   const navLinks = [
-    { href: '/products', label: 'Marketplace', icon: null },
-    { href: '/verify', label: 'Verify', icon: Shield },
-    { href: '/explorer', label: 'Explorer', icon: null },
-  ]
+    { href: '/products', label: 'Shop', icon: ShoppingBag },
+    { href: '/verify', label: 'Verify', icon: ShieldCheck },
+    { href: '/explorer', label: 'Explorer', icon: Compass },
+  ];
 
   if (user?.role === 'ngo') navLinks.push({ href: '/dashboard/ngo', label: 'NGO Dashboard', icon: LayoutDashboard })
   if (user?.role === 'admin') navLinks.push({ href: '/dashboard/admin', label: 'Admin Dashboard', icon: LayoutDashboard })
@@ -65,14 +64,14 @@ export default function Nav() {
         <div className="hidden md:flex items-center gap-7 text-[14px]">
           {navLinks.map(link => (
             <Link key={link.href} href={link.href} className="text-[#2C1E21] hover:text-[#702935] font-medium flex items-center gap-1.5">
-              {link.icon && <link.icon size={15}/>}{link.label}
+              {link.icon && <link.icon size={15} />}{link.label}
             </Link>
           ))}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
           <Link href="/cart" className="relative p-2 rounded-lg hover:bg-white transition">
-            <ShoppingBag size={20} className="text-[#2C1E21]"/>
+            <ShoppingBag size={20} className="text-[#2C1E21]" />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-[#8B2635] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{cartCount}</span>
             )}
@@ -81,11 +80,11 @@ export default function Nav() {
           {user ? (
             <div className="hidden sm:flex items-center gap-2">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-[#E7DDD6]">
-                <User size={14} className="text-[#702935]"/>
+                <User size={14} className="text-[#702935]" />
                 <span className="text-[13px] font-medium text-[#2C1E21]">{user.name}</span>
                 <span className="text-[10px] uppercase tracking-wide text-[#702935] font-bold">{user.role}</span>
               </div>
-              <button onClick={logout} className="p-2 rounded-lg hover:bg-white transition" title="Sign out"><LogOut size={18} className="text-[#6E5A5E]"/></button>
+              <button onClick={logout} className="p-2 rounded-lg hover:bg-white transition" title="Sign out"><LogOut size={18} className="text-[#6E5A5E]" /></button>
             </div>
           ) : (
             <Link href="/auth" className="hidden sm:inline-flex btn-cta text-[14px] py-2 px-4">Sign in</Link>
@@ -96,7 +95,7 @@ export default function Nav() {
             className="md:hidden p-2 rounded-lg hover:bg-white transition"
             aria-label="Open menu"
           >
-            <Menu size={24} className="text-[#2C1E21]"/>
+            <Menu size={24} className="text-[#2C1E21]" />
           </button>
         </div>
       </div>
@@ -141,14 +140,14 @@ export default function Nav() {
               <div className="flex items-center justify-between h-16 px-6 border-b border-[#E7DDD6] shrink-0">
                 <span className="font-heading font-bold text-[17px] text-[#2C1E21]">Menu</span>
                 <button onClick={() => setMobileOpen(false)} className="p-2 rounded-lg hover:bg-white transition" aria-label="Close menu">
-                  <X size={22} className="text-[#2C1E21]"/>
+                  <X size={22} className="text-[#2C1E21]" />
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-1" style={{ backgroundColor: '#F9F6F0' }}>
                 {user && (
                   <div className="flex items-center gap-2 px-3 py-2.5 mb-4 rounded-xl bg-white border border-[#E7DDD6] shrink-0">
-                    <User size={16} className="text-[#702935]"/>
+                    <User size={16} className="text-[#702935]" />
                     <span className="text-[14px] font-medium text-[#2C1E21] flex-1">{user.name}</span>
                     <span className="text-[10px] uppercase tracking-wide text-[#702935] font-bold">{user.role}</span>
                   </div>
@@ -166,7 +165,7 @@ export default function Nav() {
                       onClick={() => setMobileOpen(false)}
                       className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-medium text-[#2C1E21] hover:bg-white hover:text-[#702935] transition"
                     >
-                      {link.icon && <link.icon size={18}/>}{link.label}
+                      {link.icon && <link.icon size={18} />}{link.label}
                     </Link>
                   </motion.div>
                 ))}
@@ -175,7 +174,7 @@ export default function Nav() {
               <div className="px-6 py-6 border-t border-[#E7DDD6] shrink-0" style={{ backgroundColor: '#F9F6F0' }}>
                 {user ? (
                   <button onClick={logout} className="btn-outline w-full justify-center">
-                    <LogOut size={18}/> Sign out
+                    <LogOut size={18} /> Sign out
                   </button>
                 ) : (
                   <Link href="/auth" onClick={() => setMobileOpen(false)} className="btn-cta w-full justify-center">

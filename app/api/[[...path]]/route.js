@@ -12,14 +12,41 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 })
 
-let client, db
 let nfcIndexesReady = false
-async function getDb() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+// import { MongoClient } from 'mongodb'
+
+let client
+let db
+
+export async function getDb() {
+  console.log('MONGO_URL exists:', !!process.env.MONGO_URL)
+  console.log('DB_NAME:', process.env.DB_NAME)
+
+  if (db) {
+    console.log('Returning existing DB connection')
+    return db
   }
+
+  if (!process.env.MONGO_URL) {
+    throw new Error('MONGO_URL is missing')
+  }
+
+  if (!process.env.DB_NAME) {
+    throw new Error('DB_NAME is missing')
+  }
+
+  console.log('Creating MongoDB client...')
+
+  client = new MongoClient(process.env.MONGO_URL)
+
+  await client.connect()
+
+  console.log('MongoDB client connected')
+
+  db = client.db(process.env.DB_NAME)
+
+  console.log('Database selected:', process.env.DB_NAME)
+
   return db
 }
 

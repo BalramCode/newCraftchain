@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { Reveal } from '@/components/Motion'
-import { Loader2, ShieldCheck, ExternalLink, Sparkles, Plus, Check, Upload, X, Image as ImageIcon } from 'lucide-react'
+import { Loader2, ShieldCheck, ExternalLink, Sparkles, Plus, Check, Upload, X, ScanLine, CircleAlert } from 'lucide-react'
 
 function NgoDashboard() {
   const router = useRouter()
@@ -19,6 +19,7 @@ function NgoDashboard() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [mine, setMine] = useState([])
+  const [nfc, setNfc] = useState({ status: 'idle', message: 'Tap NFC Tag to Attach', reservationId: null, publicProductId: null, verificationUrl: null })
 
   useEffect(() => {
     const u = localStorage.getItem('cc_user')
@@ -55,14 +56,55 @@ function NgoDashboard() {
 
   const removeUpload = (i) => setUploads(prev => prev.filter((_, idx) => idx !== i))
 
+  const describeNfcError = (e) => {
+    if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'NFC permission was denied. Enable NFC and allow Chrome to use it, then try again.'
+    if (e?.name === 'NotSupportedError') return 'This tag or browser does not support NFC writing. Use an NFC-enabled Android phone with Chrome.'
+    if (e?.name === 'NetworkError') return 'The tag could not be written. It may be read-only, out of range, or have insufficient space.'
+    if (e?.name === 'AbortError') return 'NFC writing was cancelled. Keep the tag close to the phone and try again.'
+    return e?.message || 'Could not write to NFC tag. Please try again.'
+  }
+
+  const attachNfc = async () => {
+    setError('')
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
+      setNfc(prev => ({ ...prev, status: 'error', message: 'Web NFC is not available here. Use an NFC-enabled Android phone with Chrome.' }))
+      return
+    }
+
+    let reservation = nfc
+    try {
+      if (!reservation.reservationId) {
+        setNfc(prev => ({ ...prev, status: 'preparing', message: 'Creating your secure CraftChain verification link...' }))
+        const token = localStorage.getItem('cc_token')
+        const r = await fetch('/api/products/prepare-nfc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        })
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'Could not prepare NFC registration')
+        reservation = { ...reservation, ...d }
+      }
+
+      setNfc({ ...reservation, status: 'waiting', message: 'Bring your NFC tag close to the back of your phone...' })
+      const writer = new window.NDEFReader()
+      setNfc({ ...reservation, status: 'writing', message: 'Writing CraftChain verification link...' })
+      await writer.write({ records: [{ recordType: 'url', data: reservation.verificationUrl }] })
+      setNfc({ ...reservation, status: 'success', message: '✓ NFC Tag Successfully Attached' })
+    } catch (e) {
+      setNfc(prev => ({ ...prev, status: 'error', message: describeNfcError(e) }))
+    }
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     const validUrls = uploads.filter(u => u.url).map(u => u.url)
     if (validUrls.length === 0) { setError('Upload at least one product image'); return }
-    setStatus('minting'); setError(''); setResult(null)
+    if (nfc.status !== 'success' || !nfc.reservationId) { setError('Attach the NFC tag before registering this product.'); return }
+    setStatus('registering'); setError(''); setResult(null)
     try {
       const token = localStorage.getItem('cc_token')
-      const body = { ...form, price: Number(form.price), images: validUrls }
+      const body = { ...form, price: Number(form.price), images: validUrls, nfcReservationId: nfc.reservationId }
       const r = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -78,6 +120,7 @@ function NgoDashboard() {
   const reset = () => {
     setStatus('idle'); setResult(null); setUploads([])
     setForm({ name: '', price: '', category: 'Textiles', materials: '', description: '', artisan: { name: '', village: '', district: '', craftType: '' } })
+    setNfc({ status: 'idle', message: 'Tap NFC Tag to Attach', reservationId: null, publicProductId: null, verificationUrl: null })
   }
 
   return (
@@ -102,8 +145,9 @@ function NgoDashboard() {
                       <div className="text-[13px] text-[#6E5A5E]">{result.name} is now a verifiable on-chain certificate.</div>
                     </div>
                   </div>
-                  <div className="space-y-3 text-[13px]">
-                    <div><span className="text-[#6E5A5E] uppercase text-[11px] tracking-wider">Token ID</span><div className="font-heading font-bold text-[24px] text-[#2C1E21]">#{result.tokenId}</div></div>
+                    <div className="space-y-3 text-[13px]">
+                      <div><span className="text-[#6E5A5E] uppercase text-[11px] tracking-wider">CraftChain Product ID</span><div className="font-heading font-bold text-[18px] text-[#2C1E21]">{result.publicProductId}</div></div>
+                      <div><span className="text-[#6E5A5E] uppercase text-[11px] tracking-wider">Token ID</span><div className="font-heading font-bold text-[24px] text-[#2C1E21]">#{result.tokenId}</div></div>
                     <div>
                       <span className="text-[#6E5A5E] uppercase text-[11px] tracking-wider">Transaction hash</span>
                       <a href={`https://sepolia.etherscan.io/tx/${result.mintTxHash}`} target="_blank" rel="noopener noreferrer" className="hash-mono block text-[#702935] hover:underline mt-1 break-all">
@@ -118,7 +162,7 @@ function NgoDashboard() {
                   <div className="mt-6 flex gap-3 flex-wrap">
                     <button onClick={reset} className="btn-cta"><Plus size={16} /> Add another</button>
                     <Link href={`/products/${result.id}`} className="btn-outline">View product page</Link>
-                    <Link href={`/verify?token=${result.tokenId}`} className="btn-outline">Verify page</Link>
+                    <Link href={`/verify/${result.publicProductId}`} className="btn-outline">Verify NFC product</Link>
                   </div>
                 </div>
               </Reveal>
@@ -316,8 +360,31 @@ function NgoDashboard() {
                       />
 
                     </div>
-                  </div>
+                    </div>
 
+
+                  {/* NFC AUTHENTICATION */}
+                  <div className="pt-5 border-t border-[#E7DDD6]">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#702935]/10 text-[#702935] flex items-center justify-center shrink-0"><ScanLine size={19} /></div>
+                      <div>
+                        <div className="font-heading font-bold text-[16px] text-[#2C1E21]">NFC Product Authentication</div>
+                        <p className="text-[13px] text-[#6E5A5E] mt-1 leading-relaxed">Attach an NFC tag to the original product. Tap the NFC tag with your phone to securely link it to this product.</p>
+                      </div>
+                    </div>
+
+                    <div className={`mt-4 rounded-xl border p-4 ${nfc.status === 'success' ? 'border-[#00897B]/30 bg-[#00897B]/5' : nfc.status === 'error' ? 'border-[#8B2635]/25 bg-[#8B2635]/5' : 'border-[#E7DDD6] bg-[#F9F6F0]'}`}>
+                      <div className="flex gap-3 items-start">
+                        {['preparing', 'waiting', 'writing'].includes(nfc.status) ? <Loader2 size={18} className="animate-spin text-[#702935] mt-0.5 shrink-0" /> : nfc.status === 'error' ? <CircleAlert size={18} className="text-[#8B2635] mt-0.5 shrink-0" /> : <ScanLine size={18} className={`${nfc.status === 'success' ? 'text-[#00897B]' : 'text-[#702935]'} mt-0.5 shrink-0`} />}
+                        <div className="text-[13px] font-medium text-[#2C1E21]">{nfc.message}</div>
+                      </div>
+                      {nfc.publicProductId && <div className="mt-3 text-[12px] text-[#6E5A5E]">Reserved product ID: <span className="font-mono text-[#2C1E21]">{nfc.publicProductId}</span></div>}
+                      <button type="button" onClick={attachNfc} disabled={['preparing', 'waiting', 'writing'].includes(nfc.status) || status === 'registering'} className="btn-outline mt-4 disabled:opacity-60 disabled:cursor-not-allowed">
+                        {nfc.status === 'success' ? <><Check size={16} /> NFC Tag Attached</> : nfc.status === 'error' ? <><ScanLine size={16} /> Retry NFC Scan</> : <><ScanLine size={16} /> Scan & Attach NFC Tag</>}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-[#6E5A5E] mt-2">Requires an NFC-enabled Android phone and a browser with Web NFC support, such as Chrome. The tag stores only the public verification link.</p>
+                  </div>
 
                   {/* ERROR */}
                   {error && (
@@ -330,18 +397,18 @@ function NgoDashboard() {
 
                   {/* SUBMIT */}
                   <button
-                    disabled={status === 'minting'}
+                    disabled={status === 'registering' || ['preparing', 'waiting', 'writing'].includes(nfc.status)}
                     className="btn-cta w-full justify-center mt-2"
                   >
-                    {status === 'minting' ? (
+                    {status === 'registering' ? (
                       <>
                         <Loader2 className="animate-spin" size={18} />
-                        Minting on Sepolia… (10–20s)
+                        Registering on Sepolia… (10–20s)
                       </>
                     ) : (
                       <>
                         <Sparkles size={16} />
-                        Register & Mint NFT
+                        Register NFC Product & Mint NFT
                       </>
                     )}
                   </button>

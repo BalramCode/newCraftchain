@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
+import { randomBytes } from 'crypto'
 import { NextResponse } from 'next/server'
 import { hashPassword, verifyPassword, signToken, getAuthUser } from '@/lib/auth'
 import { getContract, getSigner, getProvider, getDeploymentBlock, CONTRACT_ADDRESS, DEPLOYMENT_TX, EXPLORER_URL } from '@/lib/chain'
@@ -12,6 +13,7 @@ cloudinary.config({
 })
 
 let client, db
+let nfcIndexesReady = false
 async function getDb() {
   if (!client) {
     client = new MongoClient(process.env.MONGO_URL)
@@ -30,6 +32,226 @@ function cors(res) {
 function ok(data, status = 200) { return cors(NextResponse.json(data, { status })) }
 function err(msg, status = 400) { return cors(NextResponse.json({ error: msg }, { status })) }
 function clean(doc) { if (!doc) return doc; const { _id, ...rest } = doc; return rest }
+
+async function ensureNfcIndexes(database) {
+  if (nfcIndexesReady) return
+  await Promise.all([
+    database.collection('products').createIndex(
+      { publicProductId: 1 },
+      { unique: true, partialFilterExpression: { publicProductId: { $type: 'string' } } }
+    ),
+    database.collection('nfcReservations').createIndex({ id: 1 }, { unique: true }),
+    database.collection('nfcReservations').createIndex({ publicProductId: 1 }, { unique: true }),
+    database.collection('nfcReservations').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  ])
+  nfcIndexesReady = true
+}
+
+function getPublicAppUrl(request) {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL
+  if (configuredUrl) return configuredUrl.replace(/\/$/, '')
+  if (process.env.NODE_ENV === 'development') return new URL(request.url).origin
+  return null
+}
+
+function publicProductId() {
+  return `CRFT-${randomBytes(6).toString('hex').toUpperCase()}`
+}
+
+function nfcWriteError(error) {
+  return error?.shortMessage || error?.message || 'Unable to complete NFC product registration'
+}
+
+async function createNfcReservation(database, request, user) {
+  const appUrl = getPublicAppUrl(request)
+  if (!appUrl) throw new Error('NEXT_PUBLIC_APP_URL must be configured before NFC tags can be registered')
+  await ensureNfcIndexes(database)
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const id = publicProductId()
+    const exists = await Promise.all([
+      database.collection('products').findOne({ publicProductId: id }, { projection: { _id: 1 } }),
+      database.collection('nfcReservations').findOne({ publicProductId: id }, { projection: { _id: 1 } }),
+    ])
+    if (exists.some(Boolean)) continue
+
+    const verificationUrl = `${appUrl}/verify/${encodeURIComponent(id)}`
+    const reservation = {
+      id: uuidv4(),
+      publicProductId: id,
+      verificationUrl,
+      userId: user.id,
+      status: 'prepared',
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 45 * 60 * 1000),
+    }
+    try {
+      await database.collection('nfcReservations').insertOne(reservation)
+      return reservation
+    } catch (error) {
+      if (error?.code !== 11000) throw error
+    }
+  }
+  throw new Error('Could not reserve a unique product ID. Please try again.')
+}
+
+async function findOrCreateArtisan(database, artisan = {}, category) {
+  let artisanDoc = null
+  if (artisan.id) artisanDoc = await database.collection('artisans').findOne({ id: artisan.id })
+  if (!artisanDoc && artisan.name) {
+    artisanDoc = {
+      id: uuidv4(),
+      name: artisan.name,
+      village: artisan.village || '',
+      district: artisan.district || '',
+      craftType: artisan.craftType || category,
+      userId: null,
+      createdAt: new Date(),
+    }
+    await database.collection('artisans').insertOne(artisanDoc)
+  }
+  return artisanDoc
+}
+
+function productMetadata({ name, description, images, category, materials, artisan, publicProductId: nfcProductId, verificationUrl }) {
+  const attributes = [
+    { trait_type: 'Category', value: category },
+    { trait_type: 'Material', value: materials },
+    { trait_type: 'Artisan', value: artisan?.name || 'Unknown' },
+    { trait_type: 'Village', value: artisan?.village || '' },
+    { trait_type: 'District', value: artisan?.district || '' },
+  ]
+  if (nfcProductId) attributes.push({ trait_type: 'CraftChain Product ID', value: nfcProductId })
+  if (verificationUrl) attributes.push({ trait_type: 'Verification URL', value: verificationUrl })
+  return { name, description, image: images[0] || '', images, attributes }
+}
+
+function publicProduct(product, artisan) {
+  if (!product) return null
+  return {
+    publicProductId: product.publicProductId,
+    name: product.name,
+    price: product.price,
+    images: product.images || [],
+    materials: product.materials || '',
+    description: product.description || '',
+    category: product.category || '',
+    artisan: artisan ? clean(artisan) : null,
+    cooperativeName: product.ngoName || product.registeredByName || null,
+    registrationDate: product.createdAt || product.mintedAt || null,
+    tokenId: product.tokenId,
+    contractAddress: product.contractAddress,
+    mintTxHash: product.mintTxHash,
+    nfcVerificationUrl: product.nfcVerificationUrl,
+  }
+}
+
+async function mintProductProof({ name, price, images, materials, description, category, artisan, publicProductId: nfcProductId, verificationUrl }) {
+  const metadata = productMetadata({ name, description, images, category, materials, artisan, publicProductId: nfcProductId, verificationUrl })
+  const tokenURI = 'data:application/json;base64,' + Buffer.from(JSON.stringify(metadata)).toString('base64')
+  const contract = getContract(true)
+  const signer = getSigner()
+  const tx = await contract.mintProduct(signer.address, tokenURI)
+  const receipt = await tx.wait()
+  let tokenId = null
+  for (const log of receipt.logs) {
+    try {
+      const parsed = contract.interface.parseLog(log)
+      if (parsed && parsed.name === 'ProductMinted') { tokenId = Number(parsed.args.tokenId); break }
+    } catch (_) {}
+  }
+  if (tokenId === null) tokenId = Number(await contract.totalMinted())
+  return { tokenId, mintTxHash: tx.hash, currentOwnerAddress: signer.address, contractAddress: CONTRACT_ADDRESS }
+}
+
+async function finalizeNfcProduct(database, body, user) {
+  const { nfcReservationId, name, price, images = [], materials = '', description = '', category = 'General', artisan = {} } = body
+  if (!nfcReservationId) throw new Error('NFC reservation is required')
+  if (!name || !Number.isFinite(Number(price)) || Number(price) <= 0) throw new Error('A product name and valid price are required')
+  if (!Array.isArray(images) || images.length === 0) throw new Error('At least one product image is required')
+
+  await ensureNfcIndexes(database)
+  let reservation = await database.collection('nfcReservations').findOne({ id: nfcReservationId, userId: user.id })
+  if (!reservation) {
+    const existing = await database.collection('products').findOne({ nfcReservationId, registeredByUserId: user.id })
+    if (existing) return existing
+    throw new Error('This NFC reservation is invalid or belongs to another account')
+  }
+  if (reservation.status === 'finalized') {
+    const existing = await database.collection('products').findOne({ nfcReservationId, registeredByUserId: user.id })
+    if (existing) return existing
+  }
+  if (reservation.expiresAt < new Date() && reservation.status === 'prepared') throw new Error('This NFC link has expired. Scan the tag again to create a new link.')
+
+  if (reservation.status === 'prepared') {
+    reservation = await database.collection('nfcReservations').findOneAndUpdate(
+      { id: nfcReservationId, userId: user.id, status: 'prepared', expiresAt: { $gt: new Date() } },
+      { $set: { status: 'minting', mintingAt: new Date() } },
+      { returnDocument: 'after', includeResultMetadata: false }
+    )
+    if (!reservation) throw new Error('This NFC registration is already being processed. Please wait a moment.')
+  } else if (reservation.status === 'minting') {
+    throw new Error('This NFC registration is already being processed. Please wait a moment.')
+  }
+
+  let proof = reservation.chainProof
+  try {
+    if (!proof) {
+      const metadataArtisan = artisan.id
+        ? await database.collection('artisans').findOne({ id: artisan.id }) || artisan
+        : artisan
+      proof = await mintProductProof({ name, price, images, materials, description, category, artisan: metadataArtisan, publicProductId: reservation.publicProductId, verificationUrl: reservation.verificationUrl })
+      await database.collection('nfcReservations').updateOne(
+        { id: nfcReservationId, userId: user.id },
+        { $set: { status: 'chain_minted', chainProof: proof, chainMintedAt: new Date() } }
+      )
+    }
+
+    const artisanDoc = await findOrCreateArtisan(database, artisan, category)
+    const product = {
+      id: uuidv4(),
+      publicProductId: reservation.publicProductId,
+      nfcVerificationUrl: reservation.verificationUrl,
+      nfcStatus: 'attached',
+      nfcAttachedAt: new Date(),
+      nfcReservationId,
+      name,
+      price: Number(price),
+      images,
+      materials,
+      description,
+      category,
+      artisanId: artisanDoc?.id || null,
+      ...proof,
+      registeredByUserId: user.id,
+      registeredByName: user.name || null,
+      ngoName: user.name || null,
+      mintedAt: new Date(),
+      createdAt: new Date(),
+    }
+    try {
+      await database.collection('products').insertOne(product)
+    } catch (error) {
+      if (error?.code !== 11000) throw error
+      const existing = await database.collection('products').findOne({ publicProductId: reservation.publicProductId })
+      if (!existing) throw error
+      return existing
+    }
+    await database.collection('nfcReservations').updateOne(
+      { id: nfcReservationId, userId: user.id },
+      { $set: { status: 'finalized', finalizedAt: new Date(), productId: product.id } }
+    )
+    return product
+  } catch (error) {
+    if (!proof) {
+      await database.collection('nfcReservations').updateOne(
+        { id: nfcReservationId, userId: user.id, status: 'minting' },
+        { $set: { status: 'prepared', lastError: nfcWriteError(error), lastFailedAt: new Date() } }
+      )
+    }
+    throw error
+  }
+}
 
 export async function OPTIONS() { return cors(new NextResponse(null, { status: 200 })) }
 
@@ -486,6 +708,61 @@ async function handler(request, { params }) {
     }
 
     // ---------- Products ----------
+    if (route === '/products/prepare-nfc' && method === 'POST') {
+      const u = getAuthUser(request)
+      if (!u || (u.role !== 'ngo' && u.role !== 'admin')) return err('Only NGO/admin can register NFC products', 403)
+      const reservation = await createNfcReservation(db, request, u)
+      return ok({
+        reservationId: reservation.id,
+        publicProductId: reservation.publicProductId,
+        verificationUrl: reservation.verificationUrl,
+        expiresAt: reservation.expiresAt,
+      }, 201)
+    }
+    if (path[0] === 'products' && path[1] === 'verify' && path.length === 3 && method === 'GET') {
+      const requestedProductId = path[2]
+      const product = await db.collection('products').findOne({ publicProductId: requestedProductId })
+      if (!product) return ok({ authentic: false, authenticityStatus: 'not_found', reason: 'Product Not Found / Invalid NFC Tag', publicProductId: requestedProductId })
+      const artisan = product.artisanId ? await db.collection('artisans').findOne({ id: product.artisanId }) : null
+      const exposedProduct = publicProduct(product, artisan)
+      if (['revoked', 'suspended'].includes(String(product.status || '').toLowerCase())) {
+        return ok({ authentic: false, authenticityStatus: String(product.status).toLowerCase(), reason: `This product has been ${String(product.status).toLowerCase()}.`, product: exposedProduct })
+      }
+      try {
+        const contract = getContract(false)
+        const result = await contract.verifyProduct(product.tokenId)
+        const uri = result[3]
+        let metadata = null
+        if (uri?.startsWith('data:application/json;base64,')) {
+          try { metadata = JSON.parse(Buffer.from(uri.slice('data:application/json;base64,'.length), 'base64').toString('utf-8')) } catch (_) {}
+        }
+        const chainProductId = metadata?.attributes?.find(attribute => attribute.trait_type === 'CraftChain Product ID')?.value
+        if (chainProductId !== product.publicProductId) throw new Error('The on-chain certificate is not linked to this public product ID')
+        return ok({
+          authentic: true,
+          authenticityStatus: 'authentic',
+          product: exposedProduct,
+          blockchain: {
+            verified: true,
+            tokenId: product.tokenId,
+            currentOwner: result[0],
+            artisanAddress: result[1],
+            mintDate: new Date(Number(result[2]) * 1000).toISOString(),
+            contractAddress: CONTRACT_ADDRESS,
+            transactionHash: product.mintTxHash,
+            explorerUrl: `${EXPLORER_URL}/tx/${product.mintTxHash}`,
+          },
+        })
+      } catch (error) {
+        return ok({
+          authentic: false,
+          authenticityStatus: 'verification_failed',
+          reason: 'Verification Failed',
+          product: exposedProduct,
+          blockchain: { verified: false, tokenId: product.tokenId, transactionHash: product.mintTxHash, explorerUrl: product.mintTxHash ? `${EXPLORER_URL}/tx/${product.mintTxHash}` : null },
+        })
+      }
+    }
     if (route === '/products' && method === 'GET') {
       const url = new URL(request.url)
       const q = url.searchParams.get('q')
@@ -509,16 +786,15 @@ async function handler(request, { params }) {
       const u = getAuthUser(request)
       if (!u || (u.role !== 'ngo' && u.role !== 'admin')) return err('Only NGO/admin can register products', 403)
       const body = await request.json()
+      if (body.nfcReservationId) {
+        const product = await finalizeNfcProduct(db, body, u)
+        const artisan = product.artisanId ? await db.collection('artisans').findOne({ id: product.artisanId }) : null
+        return ok({ ...clean(product), artisan: artisan ? clean(artisan) : null })
+      }
       const { name, price, images = [], materials = '', description = '', category = 'General', artisan = {} } = body
       if (!name || !price) return err('name and price required')
 
-      let artisanDoc = null
-      if (artisan.id) artisanDoc = await db.collection('artisans').findOne({ id: artisan.id })
-      if (!artisanDoc && artisan.name) {
-        artisanDoc = { id: uuidv4(), name: artisan.name, village: artisan.village || '', district: artisan.district || '',
-          craftType: artisan.craftType || category, userId: null, createdAt: new Date() }
-        await db.collection('artisans').insertOne(artisanDoc)
-      }
+      const artisanDoc = await findOrCreateArtisan(db, artisan, category)
 
       const metadata = { name, description, image: images[0] || '', images,
         attributes: [

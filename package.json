@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-       "dev": "next dev --hostname 0.0.0.0 --port 3000",
+        "dev": "next dev --hostname 0.0.0.0 --port 3000",
         "dev:no-reload": "next dev --hostname 0.0.0.0 --port 3000",
         "dev:webpack": "next dev --hostname 0.0.0.0 --port 3000",
         "build": "next build",
@@ -49,7 +49,7 @@
         "date-fns": "4.1.0",
         "dayjs": "1.11.13",
         "embla-carousel-react": "8.6.0",
-        "ethers": "6.13.4",
+        "ethers": "^6.17.0",
         "framer-motion": "11.18.0",
         "input-otp": "1.4.2",
         "jsonwebtoken": "^9.0.3",

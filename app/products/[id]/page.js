@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { toast } from '@/hooks/use-toast'
-import { ShieldCheck, ExternalLink, MapPin, Loader2, ShoppingBag, Check, ArrowRight, Copy, ArrowLeft, Zap, Minus, Plus } from 'lucide-react'
+import { ShieldCheck, ExternalLink, MapPin, Loader2, ShoppingBag, Check, ArrowRight, Copy, ArrowLeft, Zap, Minus, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 function ProductDetail() {
   const { id } = useParams()
@@ -18,6 +18,19 @@ function ProductDetail() {
   const [contractInfo, setContractInfo] = useState({ explorer: 'https://sepolia.etherscan.io' })
   const [quantity, setQuantity] = useState(1)
   const [selectedVariants, setSelectedVariants] = useState({})
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!lightboxOpen) return
+      if (e.key === 'Escape') setLightboxOpen(false)
+      if (e.key === 'ArrowRight') setActiveImageIndex(prev => prev < (product?.images?.length || 1) - 1 ? prev + 1 : 0)
+      if (e.key === 'ArrowLeft') setActiveImageIndex(prev => prev > 0 ? prev - 1 : (product?.images?.length || 1) - 1)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [lightboxOpen, product])
 
   useEffect(() => {
     fetch('/api/contract-info').then(r => r.json()).then(setContractInfo).catch(() => { })
@@ -152,20 +165,74 @@ function ProductDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 xl:gap-16 items-start">
 
           {/* Left Canvas Element (Sticky Gallery Layout) */}
-          <div className="lg:col-span-6 space-y-4 lg:sticky lg:top-6">
-            <div className="aspect-[1/1] sm:aspect-[4/3] md:aspect-square max-h-[560px] w-full rounded-2xl overflow-hidden bg-white border border-[#E7DDD6]/60 shadow-sm relative">
-              <img
-                src={product.images?.[0]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-              {product.tokenId != null && (
-                <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-[#E7DDD6] flex items-center gap-2 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-[#00897B] animate-pulse" />
-                  <span className="text-[11px] font-bold tracking-wider text-[#2C1E21] uppercase">On-Chain Registered</span>
+          <div className="lg:col-span-6 space-y-4 lg:sticky lg:top-24">
+              
+              {/* DESKTOP GALLERY (Hidden on Mobile) */}
+              <div className="hidden sm:block space-y-4">
+                <div 
+                  className="aspect-[4/3] md:aspect-square max-h-[640px] w-full rounded-2xl overflow-hidden bg-white border border-[#E7DDD6]/60 shadow-sm relative cursor-zoom-in group"
+                  onClick={() => setLightboxOpen(true)}
+                >
+                  <img
+                    src={product.images?.[activeImageIndex] || product.images?.[0]}
+                    alt={product.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  {product.tokenId != null && (
+                    <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-[#E7DDD6] flex items-center gap-2 shadow-sm pointer-events-none">
+                      <span className="w-2 h-2 rounded-full bg-[#00897B] animate-pulse" />
+                      <span className="text-[11px] font-bold tracking-wider text-[#2C1E21] uppercase">On-Chain Registered</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+                
+                {/* Thumbnails */}
+                {product.images?.length > 1 && (
+                  <div className="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
+                    {product.images.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`relative w-20 h-20 rounded-xl overflow-hidden shrink-0 transition-all duration-200 border-2 ${activeImageIndex === idx ? 'border-[#702935] shadow-md opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                      >
+                        <img src={img} alt={`Thumbnail ${idx+1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* MOBILE CAROUSEL (Hidden on Desktop) */}
+              <div className="sm:hidden relative w-full rounded-2xl overflow-hidden bg-white border border-[#E7DDD6]/60 shadow-sm">
+                 <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar" onScroll={(e) => {
+                   const scrollLeft = e.currentTarget.scrollLeft;
+                   const width = e.currentTarget.clientWidth;
+                   const index = Math.round(scrollLeft / width);
+                   setActiveImageIndex(index);
+                 }}>
+                   {product.images?.map((img, idx) => (
+                     <div key={idx} className="w-full shrink-0 snap-center aspect-square relative" onClick={() => setLightboxOpen(true)}>
+                       <img src={img} alt={`${product.name} ${idx+1}`} className="w-full h-full object-cover" />
+                       
+                       {product.tokenId != null && idx === 0 && (
+                          <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-[#E7DDD6] flex items-center gap-2 shadow-sm pointer-events-none">
+                            <span className="w-2 h-2 rounded-full bg-[#00897B] animate-pulse" />
+                            <span className="text-[11px] font-bold tracking-wider text-[#2C1E21] uppercase">On-Chain</span>
+                          </div>
+                        )}
+                     </div>
+                   ))}
+                 </div>
+                 
+                 {/* Mobile Carousel Indicators */}
+                 {product.images?.length > 1 && (
+                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-full pointer-events-none">
+                     {product.images.map((_, idx) => (
+                       <div key={idx} className={`w-1.5 h-1.5 rounded-full transition-all ${activeImageIndex === idx ? 'bg-white w-3' : 'bg-white/60'}`} />
+                     ))}
+                   </div>
+                 )}
+              </div>
           </div>
 
           {/* Right Information Framework */}
@@ -467,6 +534,68 @@ function ProductDetail() {
       </div>
 
       <Footer />
+
+      {/* Lightbox Modal */}
+      {lightboxOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col backdrop-blur-md">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 sm:p-6 text-white relative z-10">
+            <div className="text-sm font-medium opacity-70">
+              {activeImageIndex + 1} / {product.images?.length}
+            </div>
+            <button 
+              onClick={() => setLightboxOpen(false)}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X size={24} />
+            </button>
+          </div>
+          
+          {/* Main Image View */}
+          <div className="flex-1 relative flex items-center justify-center p-2 sm:p-10">
+            {product.images?.length > 1 && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setActiveImageIndex(prev => prev > 0 ? prev - 1 : product.images.length - 1) }}
+                className="absolute left-4 sm:left-10 p-3 sm:p-4 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors z-10"
+              >
+                <ChevronLeft size={24} />
+              </button>
+            )}
+
+            <img 
+              src={product.images?.[activeImageIndex]} 
+              className="max-w-full max-h-full object-contain"
+              alt="Fullscreen view"
+            />
+            
+            {product.images?.length > 1 && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setActiveImageIndex(prev => prev < product.images.length - 1 ? prev + 1 : 0) }}
+                className="absolute right-4 sm:right-10 p-3 sm:p-4 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors z-10"
+              >
+                <ChevronRight size={24} />
+              </button>
+            )}
+          </div>
+          
+          {/* Bottom Thumbnails */}
+          {product.images?.length > 1 && (
+            <div className="p-4 sm:p-6 flex justify-center pb-8">
+              <div className="flex items-center gap-2 overflow-x-auto max-w-full no-scrollbar px-4">
+                {product.images?.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden transition-all border-2 ${activeImageIndex === idx ? 'border-white opacity-100' : 'border-transparent opacity-40 hover:opacity-100'}`}
+                  >
+                    <img src={img} alt={`Thumbnail ${idx+1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -20,8 +20,8 @@ function CustomerDashboard() {
     if (!u || !t) { router.push('/auth'); return }
     setUser(JSON.parse(u))
     Promise.all([
-      fetch('/api/orders', { headers: { Authorization: `Bearer ${t}` } }).then(r=>r.json()),
-      fetch('/api/certificates/me', { headers: { Authorization: `Bearer ${t}` } }).then(r=>r.json()),
+      fetch('/api/orders', { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch('/api/certificates/me', { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
     ]).then(([o, c]) => {
       setOrders(Array.isArray(o) ? o : [])
       setCerts(Array.isArray(c) ? c : [])
@@ -33,10 +33,10 @@ function CustomerDashboard() {
 
   return (
     <div className="min-h-screen">
-      <Nav/>
+      <Nav />
       <div className="max-w-7xl mx-auto px-6 py-10">
         <Reveal>
-          <div className="chip-verified mb-3"><Sparkles size={14}/> Your account</div>
+          <div className="chip-verified mb-3"><Sparkles size={14} /> Your account</div>
           <h1 className="font-heading text-[38px] font-bold text-[#2C1E21] leading-tight">Welcome, {user?.name?.split(' ')[0] || 'friend'}.</h1>
           <p className="text-[15px] text-[#6E5A5E] mt-2">Your orders and digital certificates — all backed by real transactions on Sepolia.</p>
         </Reveal>
@@ -47,10 +47,10 @@ function CustomerDashboard() {
             { label: 'Certificates owned', value: certs.length, icon: ShieldCheck, color: '#00897B' },
             { label: 'Total spent', value: `₹${totalSpent.toLocaleString('en-IN')}`, icon: Package, color: '#8B2635' },
           ].map((s, i) => (
-            <Reveal key={i} delay={i*0.08}>
+            <Reveal key={i} delay={i * 0.08}>
               <div className="bg-white rounded-2xl border border-[#E7DDD6] p-5 card-warm flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{background: s.color+'15'}}>
-                  <s.icon size={20} style={{color: s.color}}/>
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: s.color + '15' }}>
+                  <s.icon size={20} style={{ color: s.color }} />
                 </div>
                 <div>
                   <div className="text-[11px] uppercase tracking-wider text-[#6E5A5E]">{s.label}</div>
@@ -66,41 +66,36 @@ function CustomerDashboard() {
           <h2 className="font-heading text-[24px] font-bold text-[#2C1E21] mt-12 mb-4">Your digital certificates</h2>
         </Reveal>
         {loading ? (
-          <div className="grid md:grid-cols-3 gap-5">{[...Array(3)].map((_,i)=><div key={i} className="bg-white rounded-2xl h-[380px] animate-pulse border border-[#E7DDD6]"/>) }</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">{[...Array(5)].map((_, i) => <div key={i} className="bg-white rounded-xl aspect-[4/5] animate-pulse border border-[#E7DDD6]" />)}</div>
         ) : certs.length === 0 ? (
           <div className="text-center py-16 text-[#6E5A5E] bg-white rounded-2xl border border-[#E7DDD6]">
             No certificates yet. <Link href="/products" className="text-[#702935] underline">Explore products</Link>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {certs.map((c, i) => (
-              <Reveal key={c.orderId} delay={i*0.05}>
-                <div className="bg-white rounded-2xl border border-[#00897B]/25 card-warm overflow-hidden">
-                  <div className="aspect-[4/3] bg-[#EFE7DE] overflow-hidden">
-                    <img src={c.image} alt={c.name} className="w-full h-full object-cover"/>
+              <Reveal key={c.orderId} delay={i * 0.05}>
+                <Link
+                  href={`/verify?token=${c.tokenId}`}
+                  className="group block bg-white rounded-xl border border-[#00897B]/20 overflow-hidden flex flex-col h-full hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(44,30,33,0.08)] transition-all duration-300"
+                >
+                  <div className="aspect-square bg-[#EFE7DE] overflow-hidden shrink-0">
+                    <img src={c.image} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="chip-verified"><ShieldCheck size={12}/> Token #{c.tokenId}</span>
-                      <span className="text-[11px] text-[#6E5A5E]">{new Date(c.purchasedAt).toLocaleDateString()}</span>
-                    </div>
-                    <h3 className="font-heading font-bold text-[16px] text-[#2C1E21]">{c.name}</h3>
-                    <div className="mt-4 space-y-2 text-[12px]">
-                      <div>
-                        <div className="uppercase tracking-wider text-[10px] text-[#6E5A5E] mb-0.5">Mint tx</div>
-                        <a href={`https://sepolia.etherscan.io/tx/${c.mintTxHash}`} target="_blank" rel="noopener noreferrer" className="hash-mono text-[#702935] hover:underline inline-flex items-center gap-1 break-all">{c.mintTxHash?.slice(0,22)}… <ExternalLink size={11}/></a>
+                  <div className="p-3 flex flex-col flex-1 justify-between gap-2">
+                    {/* <div>
+                      <div className="mb-1.5">
+                        <span className="chip-verified text-[9px] px-1.5 py-0.5"><ShieldCheck size={10} /> Verified</span>
                       </div>
-                      {c.transferTxHash && (
-                        <div>
-                          <div className="uppercase tracking-wider text-[10px] text-[#6E5A5E] mb-0.5">Transfer tx</div>
-                          <a href={`https://sepolia.etherscan.io/tx/${c.transferTxHash}`} target="_blank" rel="noopener noreferrer" className="hash-mono text-[#00897B] hover:underline inline-flex items-center gap-1 break-all">{c.transferTxHash?.slice(0,22)}… <ExternalLink size={11}/></a>
-                        </div>
-                      )}
-                      {!c.transferTxHash && <div className="chip-muted text-[10px]">NGO custody — not transferred to a wallet</div>}
+                      <h3 className="font-heading font-bold text-[13px] sm:text-[14px] text-[#2C1E21] leading-tight line-clamp-2">{c.name}</h3>
+                    </div> */}
+                    <h3 className="font-heading font-bold text-[13px] sm:text-[14px] text-[#2C1E21] leading-tight line-clamp-2">{c.name}</h3>
+
+                    <div className="mt-1 text-[11px] font-semibold text-[#00897B] group-hover:text-[#00695C] transition-colors flex items-center justify-between">
+                      View details <span className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">→</span>
                     </div>
-                    <Link href={`/verify?token=${c.tokenId}`} className="mt-4 inline-flex items-center gap-1 text-[12px] font-medium text-[#00897B] hover:underline">Open full authenticity report →</Link>
                   </div>
-                </div>
+                </Link>
               </Reveal>
             ))}
           </div>
@@ -111,7 +106,35 @@ function CustomerDashboard() {
           <h2 className="font-heading text-[24px] font-bold text-[#2C1E21] mt-12 mb-4">Order history</h2>
         </Reveal>
         <Reveal>
-          <div className="bg-white rounded-2xl border border-[#E7DDD6] overflow-hidden card-warm">
+          {/* MOBILE CARDS VIEW */}
+          <div className="md:hidden space-y-4">
+            {orders.length === 0 ? (
+              <div className="text-center py-8 text-[#6E5A5E] bg-white rounded-2xl border border-[#E7DDD6]">No orders yet.</div>
+            ) : (
+              orders.map(o => (
+                <div key={o.id} className="bg-white rounded-2xl border border-[#E7DDD6] p-4 card-warm">
+                  <div className="flex gap-3 mb-3">
+                    <img src={o.productImage} className="w-12 h-12 rounded-xl object-cover shrink-0" alt="" />
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <span className="font-heading font-bold text-[15px] text-[#2C1E21] leading-tight line-clamp-2">{o.productName}</span>
+                        <span className="chip-verified text-[10px] whitespace-nowrap ml-2"><ShieldCheck size={10} /> {o.status}</span>
+                      </div>
+                      <div className="text-[11px] text-[#6E5A5E] mt-1">Token #{o.tokenId}</div>
+                    </div>
+                  </div>
+                  <div className="h-px bg-[#E7DDD6] my-3" />
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-[#6E5A5E]">{new Date(o.createdAt).toLocaleDateString()}</span>
+                    <span className="font-heading font-bold text-[15px] text-[#702935]">₹{Number(o.price).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* DESKTOP TABLE VIEW */}
+          <div className="hidden md:block bg-white rounded-2xl border border-[#E7DDD6] overflow-hidden card-warm">
             <table className="w-full text-[13px]">
               <thead className="bg-[#F9F6F0] text-[11px] uppercase tracking-wider text-[#6E5A5E]">
                 <tr>
@@ -126,12 +149,12 @@ function CustomerDashboard() {
                 {orders.map(o => (
                   <tr key={o.id} className="border-t border-[#E7DDD6]">
                     <td className="px-5 py-3 flex items-center gap-3">
-                      <img src={o.productImage} className="w-10 h-10 rounded-lg object-cover" alt=""/>
+                      <img src={o.productImage} className="w-10 h-10 rounded-lg object-cover" alt="" />
                       <span className="font-medium text-[#2C1E21]">{o.productName}</span>
                     </td>
                     <td className="px-5 py-3">#{o.tokenId}</td>
                     <td className="px-5 py-3 font-heading font-bold">₹{Number(o.price).toLocaleString('en-IN')}</td>
-                    <td className="px-5 py-3"><span className="chip-verified"><ShieldCheck size={10}/> {o.status}</span></td>
+                    <td className="px-5 py-3"><span className="chip-verified"><ShieldCheck size={10} /> {o.status}</span></td>
                     <td className="px-5 py-3 text-[#6E5A5E]">{new Date(o.createdAt).toLocaleString()}</td>
                   </tr>
                 ))}
@@ -143,7 +166,7 @@ function CustomerDashboard() {
           </div>
         </Reveal>
       </div>
-      <Footer/>
+      <Footer />
     </div>
   )
 }

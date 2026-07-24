@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
-import { Search, Heart, ShieldCheck, ArrowRight, Layers, Hammer, Box } from 'lucide-react'
+import { Search, Heart, ShieldCheck, ArrowRight, Layers, Hammer, Box, ShoppingCart } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
 
 function ProductsPage() {
   const [products, setProducts] = useState([])
@@ -31,6 +32,26 @@ function ProductsPage() {
     load()
   }, [category])
 
+  const addToCart = (e, p) => {
+    e.preventDefault();
+    const cart = JSON.parse(localStorage.getItem('cc_cart') || '[]');
+    const existing = cart.find(x => x.id === p.id);
+    if (existing) {
+      toast({
+        title: "Already in cart",
+        description: `${p.name} is already in your cart.`,
+      });
+    } else {
+      cart.push({ ...p, quantity: 1, image: p.images?.[0] });
+      localStorage.setItem('cc_cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cc_cart_updated'));
+      toast({
+        title: "Added to Cart",
+        description: `${p.name} has been added to your cart.`,
+      });
+    }
+  };
+
   const categories = ['All', 'Textiles', 'Pottery', 'Woodcraft', 'Metalcraft', 'Painting']
 
   return (
@@ -49,7 +70,7 @@ function ProductsPage() {
           </div>
 
           {/* Elegant Search Bar */}
-          <form onSubmit={(e) => { e.preventDefault(); load() }} className="flex gap-2 w-full md:w-96">
+          <form onSubmit={(e) => { e.preventDefault(); load() }} className="flex flex-col sm:flex-row gap-2 w-full md:w-96">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6E5A5E]" />
               <input
@@ -59,7 +80,7 @@ function ProductsPage() {
                 className="w-full bg-white border border-[#E7DDD6] rounded-xl pl-9 pr-4 py-2.5 text-[14px] placeholder:text-[#6E5A5E]/50 focus:outline-none focus:border-[#702935] transition-all"
               />
             </div>
-            <button className="bg-[#702935] hover:bg-[#59202A] text-white px-5 py-2.5 rounded-xl text-[14px] font-medium transition-colors shadow-sm">
+            <button className="bg-[#702935] hover:bg-[#59202A] text-white px-5 py-2.5 rounded-xl text-[14px] font-medium transition-colors shadow-sm min-h-[44px]">
               Search
             </button>
           </form>
@@ -136,17 +157,14 @@ function ProductsPage() {
                       </span>
                     )}
 
-                    {/* Interactive Wishlist Button (Flipkart style) */}
+                    {/* Interactive Add to Cart Button (Flipkart style) */}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        // Wishlist toggle logic
-                      }}
-                      className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/80 backdrop-blur-xs text-[#6E5A5E] hover:text-[#702935] hover:bg-white transition-colors shadow-xs"
-                      aria-label="Add to Wishlist"
+                      onClick={(e) => addToCart(e, p)}
+                      className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/80 backdrop-blur-xs text-[#6E5A5E] hover:text-[#702935] hover:bg-white transition-all shadow-xs active:scale-95"
+                      aria-label="Add to Cart"
                     >
-                      <Heart size={13} />
+                      <ShoppingCart size={13} />
                     </button>
                   </div>
 

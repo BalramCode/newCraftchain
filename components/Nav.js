@@ -126,7 +126,7 @@ export default function Nav() {
                 position: 'fixed',
                 top: 0,
                 right: 0,
-                height: '100vh',
+                height: '100dvh',
                 width: '82%',
                 maxWidth: '384px',
                 backgroundColor: '#F9F6F0',
@@ -169,19 +169,31 @@ export default function Nav() {
                     </Link>
                   </motion.div>
                 ))}
+
+                {user && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.05 + navLinks.length * 0.05 }}
+                    className="mt-4 pt-4 border-t border-[#E7DDD6]"
+                  >
+                    <button
+                      onClick={logout}
+                      className="flex w-full items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-medium text-[#8B2635] hover:bg-[#8B2635]/10 transition"
+                    >
+                      <LogOut size={18} /> Sign out
+                    </button>
+                  </motion.div>
+                )}
               </div>
 
-              <div className="px-6 py-6 border-t border-[#E7DDD6] shrink-0" style={{ backgroundColor: '#F9F6F0' }}>
-                {user ? (
-                  <button onClick={logout} className="btn-outline w-full justify-center">
-                    <LogOut size={18} /> Sign out
-                  </button>
-                ) : (
+              {!user && (
+                <div className="px-6 py-6 border-t border-[#E7DDD6] shrink-0" style={{ backgroundColor: '#F9F6F0' }}>
                   <Link href="/auth" onClick={() => setMobileOpen(false)} className="btn-cta w-full justify-center">
                     Sign in
                   </Link>
-                )}
-              </div>
+                </div>
+              )}
             </motion.div>
           </>
         )}

@@ -43,7 +43,7 @@ function App() {
           transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
           className="absolute inset-0"
         >
-          <img src="https://images.unsplash.com/photo-1640292343595-889db1c8262e?w=2000" alt="artisan weaving" className="w-full h-full object-cover opacity-90" />
+          <img src="https://images.unsplash.com/photo-1640292343595-889db1c8262e?w=2000" alt="artisan weaving" className="w-full h-full object-cover object-[75%_center] md:object-center opacity-90" />
           {/* <div className="absolute inset-0 hero-fade"/> */}
           <div className="absolute inset-0 bg-gradient-to-r from-[#F9F6F0] via-[#F9F6F0]/50 to-[#F9F6F0]/20" />
           {/* <div className="absolute inset-0 bg-gradient-to-t from-[#F9F6F0]/60 via-transparent to-transparent" /> */}

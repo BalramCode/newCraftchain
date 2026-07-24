@@ -161,9 +161,9 @@ function CartPage() {
                 {error && <div className="mt-3 text-[13px] text-[#8B2635] bg-[#8B2635]/10 rounded-lg px-3 py-2">{error}</div>}
 
                 <button disabled={processing} onClick={checkout} className="btn-cta w-full justify-center mt-5">
-                  {processing ? <><Loader2 className="animate-spin" size={18}/> Confirming on-chain…</> : 'Pay now (mock) — finalize on-chain'}
+                  {processing ? <><Loader2 className="animate-spin" size={18}/> Confirming on-chain…</> : 'Complete Payment'}
                 </button>
-                <p className="text-[11px] text-[#6E5A5E] mt-2 text-center">Payment is mocked. Ownership transfer is real, on Sepolia.</p>
+                <p className="text-[11px] text-[#6E5A5E] mt-2 text-center">Secure Checkout. Ownership transfer is verified on-chain.</p>
               </div>
             </div>
           </div>

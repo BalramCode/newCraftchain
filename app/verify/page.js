@@ -37,9 +37,9 @@ function VerifyInner() {
         <h1 className="font-heading text-[42px] font-bold text-[#2C1E21] leading-tight">Verify a product</h1>
         <p className="text-[15px] text-[#6E5A5E] mt-2">Enter the token ID printed on the certificate to see the true owner, artisan, and origin — read live from the smart contract.</p>
 
-        <form onSubmit={submit} className="mt-8 flex gap-2">
+        <form onSubmit={submit} className="mt-8 flex flex-col sm:flex-row gap-2">
           <input value={tokenId} onChange={e=>setTokenId(e.target.value)} placeholder="Token ID (e.g. 1)" className="input-heritage flex-1"/>
-          <button className="btn-cta" disabled={loading}>
+          <button className="btn-cta justify-center sm:justify-start" disabled={loading}>
             {loading ? <Loader2 className="animate-spin" size={18}/> : <><Search size={16}/> Verify</>}
           </button>
         </form>
@@ -56,7 +56,7 @@ function VerifyInner() {
                   </div>
                 </div>
                 {result.metadata && (
-                  <div className="flex gap-5 mb-5 pb-5 border-b border-[#E7DDD6]">
+                  <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mb-5 pb-5 border-b border-[#E7DDD6]">
                     {result.metadata.image && <img src={result.metadata.image} className="w-24 h-24 rounded-xl object-cover" alt=""/>}
                     <div>
                       <div className="font-heading font-bold text-[18px] text-[#2C1E21]">{result.metadata.name}</div>

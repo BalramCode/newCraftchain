@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
+import Image from 'next/image'
 import { Reveal } from '@/components/Motion'
 import { Loader2, ShieldCheck, ExternalLink, Sparkles, Plus, Check, Upload, X, ScanLine, CircleAlert } from 'lucide-react'
 
@@ -146,7 +147,7 @@ function NgoDashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[600px] overflow-auto pr-2">
                 {mine.map(p => (
                   <Link href={`/products/${p.id}`} key={p.id} className="flex gap-3 items-center p-3 rounded-xl border border-[#E7DDD6]/60 hover:border-[#702935]/40 hover:bg-[#F9F6F0] transition-all group">
-                    <img src={p.images?.[0]} className="w-16 h-16 rounded-lg object-cover shrink-0 group-hover:scale-105 transition-transform" alt="" />
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group-hover:scale-105 transition-transform"><Image src={p.images?.[0] || 'https://new-craftchain.vercel.app/logo.png'} fill sizes="64px" className="object-cover" alt="" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[14px] font-semibold text-[#2C1E21] truncate group-hover:text-[#702935] transition-colors">{p.name}</div>
                       <div className="text-[12px] text-[#6E5A5E] mt-0.5">#{p.tokenId}</div>
@@ -235,7 +236,7 @@ function NgoDashboard() {
                           <div className="grid grid-cols-4 gap-2 mt-3">
                             {uploads.map((u, i) => (
                               <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-[#EFE7DE] border border-[#E7DDD6]">
-                                {u.uploading ? <div className="w-full h-full flex flex-col items-center justify-center text-[#6E5A5E]"><Loader2 size={16} className="animate-spin mb-1" /></div> : u.error ? <div className="w-full h-full flex items-center justify-center bg-[#8B2635]/10 text-[10px] text-[#8B2635] p-2 text-center">{u.error}</div> : <><img src={u.url} className="w-full h-full object-cover" /><button type="button" onClick={() => removeUpload(i)} className="absolute top-1 right-1 bg-black/60 rounded-full p-1 hover:bg-black text-white"><X size={11} /></button></>}
+                                {u.uploading ? <div className="w-full h-full flex flex-col items-center justify-center text-[#6E5A5E]"><Loader2 size={16} className="animate-spin mb-1" /></div> : u.error ? <div className="w-full h-full flex items-center justify-center bg-[#8B2635]/10 text-[10px] text-[#8B2635] p-2 text-center">{u.error}</div> : <><Image src={u.url} fill sizes="100px" className="object-cover" alt="upload preview" /><button type="button" onClick={() => removeUpload(i)} className="absolute top-1 right-1 bg-black/60 rounded-full p-1 hover:bg-black text-white"><X size={11} /></button></>}
                               </div>
                             ))}
                           </div>

@@ -1,9 +1,10 @@
 const nextConfig = {
   output: 'standalone',
   images: {
-    unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'avatars.githubusercontent.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
     ],
   },
   // Renamed from experimental.serverComponentsExternalPackages in Next 15

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
+import Image from 'next/image'
 import { Trash2, Loader2, ShieldCheck, ExternalLink, Check } from 'lucide-react'
 
 function CartPage() {
@@ -116,7 +117,7 @@ function CartPage() {
             <div className="md:col-span-2 space-y-3">
               {cart.map(item => (
                 <div key={item.id} className="bg-white rounded-2xl border border-[#E7DDD6] card-warm p-4 flex items-center gap-4">
-                  <img src={item.image} alt={item.name} className="w-20 h-20 rounded-xl object-cover"/>
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0"><Image src={item.image} alt={item.name} fill sizes="80px" className="object-cover"/></div>
                   <div className="flex-1">
                     <div className="font-heading font-bold text-[16px] text-[#2C1E21]">{item.name}</div>
                     <div className="text-[12px] text-[#6E5A5E]">Token #{item.tokenId}</div>

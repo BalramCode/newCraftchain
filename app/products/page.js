@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
+import Image from 'next/image'
 import { Search, Heart, ShieldCheck, ArrowRight, Layers, Hammer, Box, ShoppingCart } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
@@ -144,10 +145,12 @@ function ProductsPage() {
                 <div>
                   {/* Compact Image Container */}
                   <div className="aspect-[4/3] sm:aspect-square overflow-hidden bg-[#FAF8F6] relative border-b border-[#E7DDD6]/30">
-                    <img
-                      src={p.images?.[0]}
+                    <Image
+                      src={p.images?.[0] || 'https://new-craftchain.vercel.app/logo.png'}
                       alt={p.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
 
                     {/* Token Tag - Compact */}

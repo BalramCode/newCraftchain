@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { Reveal, CountUp } from '@/components/Motion'
@@ -133,7 +134,7 @@ function AdminDashboard() {
                     <td className="px-5 py-3 font-heading font-bold text-[#702935]">#{p.tokenId}</td>
                     <td className="px-5 py-3">
                       <Link href={`/products/${p.id}`} className="flex items-center gap-3 hover:text-[#702935]">
-                        <img src={p.images?.[0]} className="w-9 h-9 rounded-lg object-cover" alt=""/>
+                        <div className="relative w-9 h-9 rounded-lg overflow-hidden shrink-0"><Image src={p.images?.[0] || 'https://new-craftchain.vercel.app/logo.png'} fill sizes="36px" className="object-cover" alt=""/></div>
                         <span className="font-medium text-[#2C1E21]">{p.name}</span>
                       </Link>
                     </td>

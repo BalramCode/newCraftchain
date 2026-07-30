@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { toast } from '@/hooks/use-toast'
+import Image from 'next/image'
 import { ShieldCheck, ExternalLink, MapPin, Loader2, ShoppingBag, Check, ArrowRight, Copy, ArrowLeft, Zap, Minus, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 function ProductDetail() {
@@ -173,10 +174,12 @@ function ProductDetail() {
                   className="aspect-[4/3] md:aspect-square max-h-[640px] w-full rounded-2xl overflow-hidden bg-white border border-[#E7DDD6]/60 shadow-sm relative cursor-zoom-in group"
                   onClick={() => setLightboxOpen(true)}
                 >
-                  <img
-                    src={product.images?.[activeImageIndex] || product.images?.[0]}
+                  <Image
+                    src={product.images?.[activeImageIndex] || product.images?.[0] || 'https://new-craftchain.vercel.app/logo.png'}
                     alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   {product.tokenId != null && (
                     <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-[#E7DDD6] flex items-center gap-2 shadow-sm pointer-events-none">
@@ -195,7 +198,7 @@ function ProductDetail() {
                         onClick={() => setActiveImageIndex(idx)}
                         className={`relative w-20 h-20 rounded-xl overflow-hidden shrink-0 transition-all duration-200 border-2 ${activeImageIndex === idx ? 'border-[#702935] shadow-md opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
                       >
-                        <img src={img} alt={`Thumbnail ${idx+1}`} className="w-full h-full object-cover" />
+                        <Image src={img} alt={`Thumbnail ${idx+1}`} fill sizes="80px" className="object-cover" />
                       </button>
                     ))}
                   </div>
@@ -212,7 +215,7 @@ function ProductDetail() {
                  }}>
                    {product.images?.map((img, idx) => (
                      <div key={idx} className="w-full shrink-0 snap-center aspect-square relative" onClick={() => setLightboxOpen(true)}>
-                       <img src={img} alt={`${product.name} ${idx+1}`} className="w-full h-full object-cover" />
+                       <Image src={img} alt={`${product.name} ${idx+1}`} fill sizes="100vw" className="object-cover" />
                        
                        {product.tokenId != null && idx === 0 && (
                           <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-[#E7DDD6] flex items-center gap-2 shadow-sm pointer-events-none">
@@ -562,9 +565,11 @@ function ProductDetail() {
               </button>
             )}
 
-            <img 
+            <Image 
               src={product.images?.[activeImageIndex]} 
-              className="max-w-full max-h-full object-contain"
+              fill
+              sizes="100vw"
+              className="object-contain"
               alt="Fullscreen view"
             />
             
@@ -588,7 +593,7 @@ function ProductDetail() {
                     onClick={() => setActiveImageIndex(idx)}
                     className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden transition-all border-2 ${activeImageIndex === idx ? 'border-white opacity-100' : 'border-transparent opacity-40 hover:opacity-100'}`}
                   >
-                    <img src={img} alt={`Thumbnail ${idx+1}`} className="w-full h-full object-cover" />
+                    <Image src={img} alt={`Thumbnail ${idx+1}`} fill sizes="80px" className="object-cover" />
                   </button>
                 ))}
               </div>

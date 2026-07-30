@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { Search, ShieldCheck, ShieldAlert, ExternalLink, Loader2 } from 'lucide-react'
@@ -57,7 +58,7 @@ function VerifyInner() {
                 </div>
                 {result.metadata && (
                   <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mb-5 pb-5 border-b border-[#E7DDD6]">
-                    {result.metadata.image && <img src={result.metadata.image} className="w-24 h-24 rounded-xl object-cover" alt=""/>}
+                    {result.metadata.image && <div className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0"><Image src={result.metadata.image} fill sizes="96px" className="object-cover" alt=""/></div>}
                     <div>
                       <div className="font-heading font-bold text-[18px] text-[#2C1E21]">{result.metadata.name}</div>
                       <div className="text-[13px] text-[#6E5A5E] mt-1">{result.metadata.description}</div>

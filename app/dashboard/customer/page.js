@@ -6,6 +6,7 @@ import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { Reveal } from '@/components/Motion'
 import { ShieldCheck, ExternalLink, Package, ShoppingBag, Sparkles } from 'lucide-react'
+import Image from 'next/image'
 
 function CustomerDashboard() {
   const router = useRouter()
@@ -80,7 +81,7 @@ function CustomerDashboard() {
                   className="group block bg-white rounded-xl border border-[#00897B]/20 overflow-hidden flex flex-col h-full hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(44,30,33,0.08)] transition-all duration-300"
                 >
                   <div className="aspect-square bg-[#EFE7DE] overflow-hidden shrink-0">
-                    <img src={c.image} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <Image src={c.image} alt={c.name} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3 flex flex-col flex-1 justify-between gap-2">
                     {/* <div>
@@ -114,7 +115,7 @@ function CustomerDashboard() {
               orders.map(o => (
                 <div key={o.id} className="bg-white rounded-2xl border border-[#E7DDD6] p-4 card-warm">
                   <div className="flex gap-3 mb-3">
-                    <img src={o.productImage} className="w-12 h-12 rounded-xl object-cover shrink-0" alt="" />
+                    <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0"><Image src={o.productImage || 'https://new-craftchain.vercel.app/logo.png'} fill sizes="48px" className="object-cover" alt="" /></div>
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
                         <span className="font-heading font-bold text-[15px] text-[#2C1E21] leading-tight line-clamp-2">{o.productName}</span>
@@ -149,7 +150,7 @@ function CustomerDashboard() {
                 {orders.map(o => (
                   <tr key={o.id} className="border-t border-[#E7DDD6]">
                     <td className="px-5 py-3 flex items-center gap-3">
-                      <img src={o.productImage} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                      <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0"><Image src={o.productImage || 'https://new-craftchain.vercel.app/logo.png'} fill sizes="40px" className="object-cover" alt="" /></div>
                       <span className="font-medium text-[#2C1E21]">{o.productName}</span>
                     </td>
                     <td className="px-5 py-3">#{o.tokenId}</td>

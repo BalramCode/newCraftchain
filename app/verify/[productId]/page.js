@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Nav from '@/components/Nav'
 import Footer from '@/components/Footer'
 import { ShieldAlert, ShieldCheck, ExternalLink, Loader2, MapPin } from 'lucide-react'
+import Image from 'next/image'
 
 function StatusCard({ result, productId }) {
   const product = result.product
@@ -31,7 +32,7 @@ function StatusCard({ result, productId }) {
 
       {product && (
         <div className="mt-6 grid md:grid-cols-[180px_1fr] gap-6">
-          {product.images?.[0] && <img src={product.images[0]} alt={product.name} className="w-full aspect-square object-cover rounded-xl border border-[#E7DDD6]" />}
+          {product.images?.[0] && <div className="relative w-full aspect-square rounded-xl border border-[#E7DDD6] overflow-hidden"><Image src={product.images[0]} alt={product.name} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" /></div>}
           <div>
             <div className="text-[11px] uppercase tracking-wider font-bold text-[#702935]">{product.category}</div>
             <h2 className="font-heading text-[24px] font-bold text-[#2C1E21] mt-1">{product.name}</h2>

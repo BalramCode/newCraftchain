@@ -23,6 +23,9 @@ export default async function sitemap() {
 
   try {
     // Fetch dynamic product routes
+    if (!process.env.MONGODB_URI) {
+      return staticRoutes
+    }
     const client = new MongoClient(process.env.MONGODB_URI)
     await client.connect()
     const db = client.db('craftchain')

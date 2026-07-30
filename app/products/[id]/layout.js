@@ -2,6 +2,7 @@ export async function generateMetadata({ params }) {
   const { id } = await params
   
   try {
+    if (!process.env.MONGODB_URI) return { title: 'Product' }
     const { MongoClient, ObjectId } = require('mongodb')
     const client = new MongoClient(process.env.MONGODB_URI)
     await client.connect()
@@ -40,12 +41,14 @@ export default async function ProductLayout({ children, params }) {
   const { id } = await params
   let product = null;
   try {
-    const { MongoClient, ObjectId } = require('mongodb')
-    const client = new MongoClient(process.env.MONGODB_URI)
-    await client.connect()
-    const db = client.db('craftchain')
-    product = await db.collection('products').findOne({ _id: new ObjectId(id) })
-    await client.close()
+    if (process.env.MONGODB_URI) {
+      const { MongoClient, ObjectId } = require('mongodb')
+      const client = new MongoClient(process.env.MONGODB_URI)
+      await client.connect()
+      const db = client.db('craftchain')
+      product = await db.collection('products').findOne({ _id: new ObjectId(id) })
+      await client.close()
+    }
   } catch(e) {}
 
   return (
